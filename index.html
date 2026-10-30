@@ -521,7 +521,7 @@ function cxLabel(k){k=String(k).toLowerCase();
   if(/livreur|driver|courier|livr/.test(k))return "الليفرور";
   if(/agent|support|service|gestion|charg|respons|account|commercial/.test(k))return "المكلفة ف COLIX";
   if(/ville|city/.test(k))return "المدينة";if(/hub|agence|branch/.test(k))return "الوكالة";
-  if(/comment|note|remar|motif|raison/.test(k))return "ملاحظة";return k}
+  if(/comment|note|remar|motif|raison/.test(k))return "ملاحظة";if(k==="etat")return "الفلوس";return k}
 function cxFlat(obj,pre,out){out=out||[];if(!obj||typeof obj!=="object")return out;
   Object.keys(obj).forEach(k=>{const v=obj[k],key=pre?pre+"_"+k:k;
     if(v&&typeof v==="object"&&!Array.isArray(v))cxFlat(v,key,out);
@@ -531,20 +531,23 @@ function telLinks(v){const m=String(v).match(PHONE_RE);if(!m)return esc(v);let p
 function histDate(m){return String(m.date||m.created_at||m.datetime||m.time||m.updated_at||"").trim()}
 function trackPanel(o){
   if(!o||!o.t)return "";
-  const info=cxFlat(o.cx||{}).filter(([k])=>!/token|^ok$|^code$/i.test(k));
+  const info=cxFlat(o.cx||{}).filter(([k])=>!/token|^ok$|^code$|^tracking$|color/i.test(k));
   const contacts=[],seen=new Set();
   info.concat(...(o.hist||[]).map(m=>cxFlat(m))).forEach(([k,v])=>{if(PHONE_RE.test(v)&&!seen.has(v)){seen.add(v);contacts.push([k,v])}});
+  if(o.cxAgent&&o.cxAgent.p&&!seen.has(o.cxAgent.p))contacts.unshift(["agent",o.cxAgent.p+(o.cxAgent.name?" · "+o.cxAgent.name:"")]);
   const other=info.filter(([k,v])=>!PHONE_RE.test(v));
   const hist=(o.hist||[]).slice().sort((a,b)=>histDate(b).localeCompare(histDate(a)));
-  const skip=/^(status|date|created_at|updated_at|datetime|time|id|tracking|code)$/i;
+  const skip=/^(status|date|created_at|updated_at|datetime|time|id|tracking|code|etat)$|color/i;
+  const lastEtat=(hist[0]&&hist[0].etat)||"";
   return `<div class="card trk" style="gap:10px">
     <div class="head"><div><h2>تتبع الكولي <span class="num" style="font-size:.85rem">${esc(o.t)}</span></h2>
       <div class="sub">${o.cxAt?"آخر مرة تجاب من COLIX: "+new Date(o.cxAt).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"}):"باقي ما تجابو التفاصيل من COLIX"}</div></div>
       <button class="btn sec" type="button" data-trk="${esc(o.id)}" style="padding:5px 12px">جيب التفاصيل من COLIX</button></div>
+    ${lastEtat?`<div class="li" style="border:0"><span><b>الفلوس عند COLIX</b></span><span class="pill ${/^pay/i.test(lastEtat)?"p-good":"p-warn"}">${/^pay/i.test(lastEtat)?"✅ ":""}${esc(lastEtat)}</span></div>`:""}
     ${contacts.length?`<div class="list">${contacts.map(([k,v])=>`<div class="li"><span><b>${esc(cxLabel(k))}</b></span><span class="num">${telLinks(v)}</span></div>`).join("")}</div>`:""}
     ${other.length?`<div class="list">${other.map(([k,v])=>`<div class="li"><span>${esc(cxLabel(k))}</span><span>${esc(v)}</span></div>`).join("")}</div>`:""}
     ${hist.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الحالة</th><th>تفاصيل</th></tr></thead><tbody>
-      ${hist.map(m=>{const ex=cxFlat(m).filter(([k])=>!skip.test(k));return `<tr><td class="num" style="white-space:nowrap">${esc(histDate(m))}</td><td>${pillDeliv(String(m.status||""))}</td><td style="font-size:.8rem">${ex.map(([k,v])=>`<span>${esc(cxLabel(k))}: ${PHONE_RE.test(v)?telLinks(v):esc(v)}</span>`).join(" · ")}</td></tr>`}).join("")}
+      ${hist.map(m=>{const ex=cxFlat(m).filter(([k])=>!skip.test(k));return `<tr><td class="num" style="white-space:nowrap">${esc(histDate(m))}</td><td>${pillDeliv(String(m.status||""))}</td><td style="font-size:.8rem">${m.etat?`<span class="pill ${/^pay/i.test(m.etat)?"p-good":"p-none"}">${esc(m.etat)}</span> `:""}${ex.map(([k,v])=>`<span>${esc(cxLabel(k))}: ${PHONE_RE.test(v)?telLinks(v):esc(v)}</span>`).join(" · ")}</td></tr>`}).join("")}
     </tbody></table></div>`:'<p class="note">كليكي "جيب التفاصيل من COLIX" باش يبانو كاع المراحل ديال الكولي بالتواريخ.</p>'}
   </div>`;
 }
@@ -622,7 +625,15 @@ function viewDash(){
   const mrows=months.map(m=>({m,s:stats(allP.filter(o=>o.d.startsWith(m)),mexp(m))}));
 
   const prods=[...new Set(ords.map(o=>o.pr))];
-  const prow=prods.map(p=>{const os=ords.filter(o=>o.pr===p);return{p,s:stats(os,expFor(exps,p,ords))}}).sort((a,b)=>b.s.n-a.s.n);
+  const prow0=prods.map(p=>{const os=ords.filter(o=>o.pr===p);return{p,s:stats(os,expFor(exps,p,ords))}}).sort((a,b)=>b.s.n-a.s.n);
+  /* products sharing one ad (CHARIT 5m + 10m, BAGIT + packs): a total row first, then each product under it */
+  const prow=[],used=new Set();
+  prow0.forEach(row=>{if(used.has(row.p))return;const g=groupOf(row.p);
+    const members=g?prow0.filter(x=>groupOf(x.p)===g):[row];
+    if(g&&members.length>1){const names=members.map(x=>x.p);
+      prow.push({p:g+" (المجموع)",s:stats(ords.filter(o=>names.includes(o.pr)),exps.filter(e=>e.prod===g||names.includes(e.prod))),total:true});
+      members.forEach(x=>{used.add(x.p);prow.push({...x,sub:true})})}
+    else{used.add(row.p);prow.push(row)}});
   const genAds=D.prod?0:exps.filter(e=>!e.prod||e.prod==="عام"||(AD_GROUPS[e.prod]&&!ords.some(o=>groupOf(o.pr)===e.prod))).reduce((a,e)=>a+(+e.amount||0),0);
 
   const cnt=(arr,f)=>{const c={};arr.forEach(o=>{const k=f(o);c[k]=(c[k]||0)+1});return Object.entries(c).sort((a,b)=>b[1]-a[1])};
@@ -662,7 +673,7 @@ function viewDash(){
   </div>
   <div class="card"><h2>حسب المنتوج</h2>
     ${prow.length?`<div class="tw"><table><thead><tr><th>المنتوج</th><th class="r">الطلبيات</th><th class="r">التأكيد</th><th class="r">توصلات</th><th class="r">التوصيل</th><th class="r">المداخيل</th><th class="r">التكاليف</th><th class="r">الربح</th></tr></thead><tbody>
-    ${prow.map(({p,s})=>`<tr><td>${esc(p)}</td><td class="r num">${s.n}</td><td class="r num">${pct(s.conf,s.n)}</td><td class="r num">${s.del}</td><td class="r num">${pct(s.del,s.conf)}</td><td class="r num">${dh(s.rev)}</td><td class="r num">${dh(s.costs)}</td><td class="r num ${s.profit<0?"neg":"pos"}">${dh(s.profit)}</td></tr>`).join("")}
+    ${prow.map(({p,s,total,sub})=>`<tr style="${total?"background:var(--sunken);font-weight:700":""}"><td>${sub?'<span style="color:var(--muted)">↳ </span>':""}${esc(p)}</td><td class="r num">${s.n}</td><td class="r num">${pct(s.conf,s.n)}</td><td class="r num">${s.del}</td><td class="r num">${pct(s.del,s.conf)}</td><td class="r num">${dh(s.rev)}</td><td class="r num">${dh(s.costs)}</td><td class="r num ${s.profit<0?"neg":"pos"}">${dh(s.profit)}</td></tr>`).join("")}
     </tbody></table></div>${genAds?`<p class="note">الإشهار ديال CHARIT كيتقسم على 5 متر و10 متر حسب عدد الطلبيات ديال كل وحدة. المصاريف اللي ما مربوطاش بمنتوج (${dh(genAds)}) محسوبة فالمجموع لفوق، ماشي ف هاد الجدول.</p>`:""}`:'<p class="empty">ما كاين حتى طلبية فهاد الفترة. زيد الطلبيات من "الطلبيات".</p>'}
   </div>
   <div class="card"><h2>شهر بشهر</h2>
@@ -780,7 +791,9 @@ function viewOrders(){
     const byT={};allOrders().forEach(o=>{if(o.t)byT[o.t.toUpperCase()]=o});
     const touched=new Set(),miss=[];let ch=0;
     items.forEach(it=>{const o=byT[it.t.toUpperCase()];if(!o){miss.push(it.t);return}
-      if(o.ds!==it.ds){if(it.ds==="Livré"&&o.ds!=="Livré")o.ld=it.date||today();o.ds=it.ds;if(o.ds!=="Livré")delete o.ld;ch++;touched.add(o.d.slice(0,7))}
+      const ag=(it.phones||[]).find(x=>phone(x.p)!==phone(o.p));
+      if(ag&&(!o.cxAgent||o.cxAgent.p!==phone(ag.p))){o.cxAgent={name:/\d/.test(ag.name)?"":ag.name,p:phone(ag.p)};touched.add(o.d.slice(0,7))}
+      if(it.ds&&o.ds!==it.ds){if(it.ds==="Livré"&&o.ds!=="Livré")o.ld=it.date||today();o.ds=it.ds;if(o.ds!=="Livré")delete o.ld;ch++;touched.add(o.d.slice(0,7))}
       if(o.imp&&it.date&&fresh(it.date)){delete o.imp;touched.add(o.d.slice(0,7))}});
     O.paste=false;viewOrders();
     try{await Promise.all([...touched].map(m=>writeOrders(m)));toast(`تبدلات ${ch} من ${items.length}`+(miss.length?` · ${miss.length} ما لقيتهومش`:""))}catch(e){toast(failMsg(e))}};
@@ -856,11 +869,14 @@ function parseColix(txt){
   const L=String(txt).split(/\r?\n/),out=[],trk=/^[0-9]{0,2}-?[A-Za-z]{2,4}\d{8,}[A-Za-z]{2}$/;
   for(let i=0;i<L.length;i++){
     const t=L[i].trim();if(!trk.test(t))continue;
-    let ds="",date="";
+    let ds="",date="";const phones=[];
     for(let j=i+1;j<L.length&&j<i+25;j++){const x=L[j];if(trk.test(x.trim()))break;
-      const m=x.match(/\t\s*(Non Payé|Payé|Non paye|Paye)\s*\t\s*([^\t]+?)\s*$/i);if(m)ds=m[2].trim();
-      const dm=x.match(/(\d{4}-\d{2}-\d{2})\s+\d{1,2}:\d{2}/);if(dm)date=dm[1]}
-    if(ds)out.push({t,ds,date});
+      const m=x.match(/(?:^|\t)\s*(Non Payé|Payé|Non paye|Paye)\s*\t\s*([^\t]+?)\s*(?:\t|$)/i);if(m)ds=m[2].trim();
+      const dm=x.match(/(\d{4}-\d{2}-\d{2})\s+\d{1,2}:\d{2}/);if(dm&&!date)date=dm[1];
+      /* phone numbers in the row: the client's, and the COLIX agent's (her name is on the line just before) */
+      const pm=x.trim().match(/^(?:\+?212|0)[5-7]\d{8}$/);
+      if(pm){let k=j-1;while(k>i&&!L[k].trim())k--;phones.push({p:pm[0],name:k>i?L[k].split("\t").pop().trim().slice(0,40):""})}}
+    if(ds||phones.length)out.push({t,ds,date,phones});
   }
   return out;
 }
