@@ -622,9 +622,11 @@ function viewRet(){
   const list=all.filter(o=>(R.f==="wait"?!o.rcv:!!o.rcv)&&(!q||[o.n,o.p,phone(o.p),o.t,o.c].some(x=>String(x||"").toLowerCase().includes(q))))
     .sort((a,b)=>R.f==="wait"?(retDate(a)||a.d).localeCompare(retDate(b)||b.d):String(b.rcv).localeCompare(String(a.rcv)));
   const waitN=all.filter(o=>!o.rcv).length;
+  const LATE=10,late=o=>{const d=retDate(o)||o.d;return !o.rcv&&d<=shiftDays(today(),-LATE)},lateN=all.filter(late).length;
   $("view").innerHTML=`
   <div class="head"><div><h1>الرجوع</h1><div class="sub">الكولي اللي رجعو (Retourné / Refusé / Annulé). ملي يوصلك الكولي فيدك، كليكي "✓ وصلني"، والسلعة كترجع للستوك بوحدها.</div></div>
     <label class="field">نهار الوصول<input type="date" id="retD" value="${esc(R.date)}"></label></div>
+  ${lateN?`<div class="card" style="border-color:var(--bad);background:var(--bad-soft)"><b style="color:var(--bad)">⚠️ ${lateN} كولي رجعو ف COLIX من ${LATE} أيام ولا كثر، وباقي ما وصلوكش. طالب بيهم COLIX.</b></div>`:""}
   <div class="card" style="padding:12px"><div class="bar">
     <input class="inp" id="retQ" placeholder="قلب بالتراكينغ، السمية، التيليفون…" value="${esc(R.q)}" style="flex:1;min-width:200px">
     <button class="chip" data-rf="wait" aria-pressed="${R.f==="wait"}">باقي ما وصلونيش <span class="num">(${waitN})</span></button>
@@ -633,7 +635,7 @@ function viewRet(){
   <div class="card" style="padding:8px 12px">${list.length?`<div class="tw"><table><thead><tr><th>الطلبية</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th>Tracking</th><th>الحالة</th><th>${R.f==="wait"?"رجع ف COLIX":"وصلني"}</th><th></th></tr></thead><tbody>
   ${list.map(o=>`<tr class="row-ret"><td class="num">${esc(o.d.slice(5))}</td><td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))}</small></div></td><td>${esc(o.c||"")}</td><td>${esc(o.pr)}${(o.q||1)>1?" ×"+o.q:""}</td>
     <td class="num" style="font-size:.75rem">${esc(o.t)}</td><td>${pillDeliv(o.ds)}</td>
-    <td class="num">${R.f==="wait"?esc(retDate(o)):esc(o.rcv)}</td>
+    <td class="num">${R.f==="wait"?esc(retDate(o))+(late(o)?` <span class="pill p-bad">فاتو ${Math.floor((new Date(today())-new Date(retDate(o)||o.d))/864e5)} يوم</span>`:""):esc(o.rcv)}</td>
     <td style="white-space:nowrap">${R.f==="wait"?`<button class="btn" data-rcv="${esc(o.id)}" style="padding:5px 12px">✓ وصلني</button>`:`<button class="btn sec" data-unrcv="${esc(o.id)}" style="padding:5px 10px">${UI.retArm===o.id?"متأكد؟":"تراجع"}</button>`}</td></tr>`).join("")}
   </tbody></table></div>`:`<p class="empty">${R.f==="wait"?"ما كاين حتى كولي راجع كتسناه 👍":"باقي ما سجلتي حتى كولي وصلك."}</p>`}</div>
   <p class="note">الستوك: الكولي اللي رجع وباقي ما وصلكش كيتحسب "راجع"، وما كيدخلش للستوك حتى تكليكي "✓ وصلني".</p>`;
