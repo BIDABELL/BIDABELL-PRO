@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#14254A">
 <title>BIDABELL Pro</title>
+<script>/* light / dark mode chosen with the 🌙 button, remembered on this device */
+(function(){var t="";try{t=localStorage.getItem("bidabell-theme")||""}catch(e){}
+if(!t)t=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";
+document.documentElement.setAttribute("data-theme",t)})();</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
@@ -148,6 +152,7 @@ button.li.on{background:var(--gold-soft)}
       <a href="#settings">الإعدادات</a>
     </nav>
     <button class="btn" id="syncBtn" style="padding:6px 12px;font-size:.85rem" hidden>تحديث الحالات</button>
+    <button class="btn sec" id="themeBtn" type="button" style="padding:6px 10px;font-size:1rem;background:transparent;color:var(--navy-ink);border-color:color-mix(in srgb,var(--navy-ink) 30%,transparent)" title="الوضع الليلي / العادي" aria-label="الوضع الليلي / العادي">🌙</button>
     <button class="btn sec" id="outBtn" style="padding:6px 12px;font-size:.85rem;background:transparent;color:var(--navy-ink);border-color:color-mix(in srgb,var(--navy-ink) 30%,transparent)" hidden>خروج</button>
     <span class="sync" id="sync">كيتحمل…</span>
   </div>
@@ -334,6 +339,13 @@ function subscribe(){
   let hid=0;document.addEventListener("visibilitychange",async()=>{if(document.visibilityState==="hidden"){hid=Date.now();return}
     if(hid&&Date.now()-hid>10*60*1000){try{await loadAll();refresh()}catch(e){}}});
 }
+
+/* ================= light / dark button ================= */
+function themeNow(){return document.documentElement.getAttribute("data-theme")==="dark"?"dark":"light"}
+function paintThemeBtn(){const b=$("themeBtn");if(b)b.textContent=themeNow()==="dark"?"☀️":"🌙"}
+function bindThemeBtn(){const b=$("themeBtn");if(!b)return;paintThemeBtn();
+  b.onclick=()=>{const t=themeNow()==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",t);try{localStorage.setItem("bidabell-theme",t)}catch(e){}paintThemeBtn()}}
+bindThemeBtn();
 
 /* ================= login ================= */
 async function init(){
