@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#14254A">
 <title>BIDABELL Pro</title>
+<link rel="icon" type="image/png" href="icon-64.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <script>/* light / dark mode chosen with the 🌙 button, remembered on this device */
 (function(){var t="";try{t=localStorage.getItem("bidabell-theme")||""}catch(e){}
 if(!t)t=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";
@@ -45,7 +48,9 @@ button{cursor:pointer}
 .top{background:var(--navy);color:var(--navy-ink);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
 .top .inner{display:flex;align-items:center;gap:18px;padding-block:10px;flex-wrap:wrap}
 .brand{font-family:var(--display);font-weight:700;font-size:1.15rem;letter-spacing:.04em;white-space:nowrap}
-.brand b{color:var(--gold)}
+.brand{display:flex;align-items:center;gap:6px}.brand b{color:var(--gold)}
+.login-logo{display:block;margin:0 auto 6px;max-width:220px;width:70%;height:auto}
+.logo-on-dark{display:none}:root[data-theme="dark"] .logo-on-light{display:none}:root[data-theme="dark"] .logo-on-dark{display:block}
 nav{display:flex;gap:4px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}
 nav a{color:var(--navy-ink);opacity:.72;text-decoration:none;padding:7px 12px;border-radius:9px;white-space:nowrap;font-weight:500}
 nav a:hover{opacity:1;background:color-mix(in srgb,var(--navy-ink) 8%,transparent)}
@@ -140,7 +145,7 @@ button.li.on{background:var(--gold-soft)}
 <div dir="rtl" lang="ar">
 <header class="top gut">
   <div class="inner">
-    <div class="brand">BIDABELL <b>Pro</b></div>
+    <div class="brand"><img src="logo-dark.png" alt="BIDABELL" style="height:36px;width:auto;display:block"><b style="font-size:.8rem">Pro</b></div>
     <nav id="nav" hidden>
       <a href="#dashboard">لوحة القيادة</a>
       <a href="#youcan">YouCan</a>
@@ -358,6 +363,7 @@ async function init(){
 function showLogin(msg){
   document.querySelector("#nav").hidden=true;$("syncBtn").hidden=true;$("outBtn").hidden=true;$("sync").textContent="";
   $("view").innerHTML=`<form class="card" id="loginF" style="max-width:380px;margin:40px auto;width:100%" autocomplete="on">
+    <img class="login-logo logo-on-light" src="logo.png" alt="BIDABELL"><img class="login-logo logo-on-dark" src="logo-dark.png" alt="BIDABELL">
     <h1>دخول</h1><div class="sub">دخل بالإيميل والمودباس ديالك</div>
     <label class="field">الإيميل<input id="lE" type="email" autocomplete="username" required style="direction:ltr"></label>
     <label class="field">المودباس<input id="lP" type="password" autocomplete="current-password" required style="direction:ltr"></label>
