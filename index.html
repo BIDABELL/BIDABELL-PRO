@@ -270,6 +270,7 @@ function cityCheck(c){const keys=Object.keys(CITY);if(!keys.length)return {ok:tr
   if(bd>lim){const pre=keys.filter(x=>k.length>=4&&(x.startsWith(k)||k.startsWith(x)));if(pre.length===1){best=pre[0];bd=0}}
   return {ok:false,sug:bd<=lim||bd===0?CITY[best].n:""}}
 function cityPill(c,fixAttr){const r=cityCheck(c);if(r.ok)return "";
+  if(!r.sug)return ` <span class="pill p-bad" title="ما لقيت حتى مدينة قريبة ليها فاللائحة ديال COLIX">⛔ هاد المدينة ما كايناش</span>`;
   return ` <span class="pill p-bad" title="ما كايناش فاللائحة ديال COLIX">⚠ المدينة غالطة</span>${r.sug&&fixAttr?` <button type="button" class="btn sec cfix" ${fixAttr} data-city="${esc(r.sug)}" style="padding:2px 8px;font-size:.75rem">صلح ← ${esc(r.sug)}</button>`:r.sug?` <small>(${esc(r.sug)}؟)</small>`:""}`}
 function delivFeeOf(o){if(o.f!=null)return +o.f;const f=cityFee(o.c);return f!=null?f:+ST.delivFee}
 function parseCities(txt){const out={};String(txt).split(/\r?\n/).forEach(line=>{const m=line.trim().match(/^(.*?)[\s,;:\t\-=]+(\d+(?:[.,]\d+)?)\s*(dh|dhs|درهم)?\s*$/i);if(!m)return;const n=m[1].trim().replace(/[,;:\t]+$/,"").trim();const k=cnorm(n);if(k)out[k]={n,f:parseFloat(m[2].replace(",","."))}});return out}
