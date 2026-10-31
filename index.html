@@ -257,6 +257,20 @@ function expFor(exps,prod,ords){
 }
 function cnorm(c){return String(c||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9\u0600-\u06ff]/g,"")}
 function cityFee(c){const k=cnorm(c);if(!k)return null;const h=CITY[k];return h?+h.f:null}
+/* ================= city check: is the city on the COLIX list? if not, best guess ================= */
+const CITY_ALIAS={"الدارالبيضاء":"casablanca","كازا":"casablanca","البيضاء":"casablanca","casa":"casablanca","dar el beida":"casablanca","الرباط":"rabat","سلا":"sale","فاس":"fes","fez":"fes","مكناس":"meknes","مراكش":"marrakech","marrakesh":"marrakech","طنجة":"tanger","tangier":"tanger","tanja":"tanger","تطوان":"tetouan","اكادير":"agadir","أكادير":"agadir","وجدة":"oujda","القنيطرة":"kenitra","الجديدة":"eljadida","jadida":"eljadida","اسفي":"safi","آسفي":"safi","بني ملال":"benimellal","خريبكة":"khouribga","سطات":"settat","برشيد":"berrechid","المحمدية":"mohammedia","تمارة":"temara","الناظور":"nador","الحسيمة":"alhoceima","العرائش":"larache","تازة":"taza","الراشيدية":"errachidia","ورزازات":"ouarzazate","العيون":"laayoune","تزنيت":"tiznit","الصويرة":"essaouira","خنيفرة":"khenifra","سيدي قاسم":"sidikacem","سيدي سليمان":"sidislimane","الخميسات":"khemisset","انزكان":"inezgane","تارودانت":"taroudant","كلميم":"guelmim","بركان":"berkane","الفقيه بن صالح":"fquihbensalah","قلعة السراغنة":"kelaasraghna","وزان":"ouazzane","شفشاون":"chefchaouen","افران":"ifrane","ازرو":"azrou"};
+function lev(a,b){if(a===b)return 0;const m=a.length,n=b.length;if(!m||!n)return m||n;let p=Array.from({length:n+1},(_,j)=>j);
+  for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[n]}
+/* -> {ok:true} | {ok:false,sug:"Casablanca"|""} ; no COLIX list yet -> ok */
+function cityCheck(c){const keys=Object.keys(CITY);if(!keys.length)return {ok:true};const k=cnorm(c);if(!k)return {ok:false,sug:""};if(CITY[k])return {ok:true};
+  const raw=String(c||"").trim().toLowerCase(),al=CITY_ALIAS[raw]||CITY_ALIAS[raw.replace(/\s+/g,"")]||CITY_ALIAS[k];
+  if(al){const a=cnorm(al);if(CITY[a])return {ok:false,sug:CITY[a].n};const hit=keys.find(x=>x.startsWith(a)||a.startsWith(x));if(hit)return {ok:false,sug:CITY[hit].n}}
+  let best="",bd=1e9;for(const x of keys){const d=lev(k,x);if(d<bd){bd=d;best=x}}
+  const lim=k.length<=4?1:k.length<=7?2:3;
+  if(bd>lim){const pre=keys.filter(x=>k.length>=4&&(x.startsWith(k)||k.startsWith(x)));if(pre.length===1){best=pre[0];bd=0}}
+  return {ok:false,sug:bd<=lim||bd===0?CITY[best].n:""}}
+function cityPill(c,fixAttr){const r=cityCheck(c);if(r.ok)return "";
+  return ` <span class="pill p-bad" title="ما كايناش فاللائحة ديال COLIX">⚠ المدينة غالطة</span>${r.sug&&fixAttr?` <button type="button" class="btn sec cfix" ${fixAttr} data-city="${esc(r.sug)}" style="padding:2px 8px;font-size:.75rem">صلح ← ${esc(r.sug)}</button>`:r.sug?` <small>(${esc(r.sug)}؟)</small>`:""}`}
 function delivFeeOf(o){if(o.f!=null)return +o.f;const f=cityFee(o.c);return f!=null?f:+ST.delivFee}
 function parseCities(txt){const out={};String(txt).split(/\r?\n/).forEach(line=>{const m=line.trim().match(/^(.*?)[\s,;:\t\-=]+(\d+(?:[.,]\d+)?)\s*(dh|dhs|درهم)?\s*$/i);if(!m)return;const n=m[1].trim().replace(/[,;:\t]+$/,"").trim();const k=cnorm(n);if(k)out[k]={n,f:parseFloat(m[2].replace(",","."))}});return out}
 function fresh(d){return !ST.start||d>=ST.start}
@@ -646,16 +660,18 @@ function viewYC(){
     <label class="field">المؤكدة<select id="ycA">${opts(conf,F.a)}</select></label></div>
   <div class="card" style="padding:12px"><div class="bar">${[["new","جداد"],["done","تأكدو"],["skip","تحيدو"]].map(([k,l])=>`<button class="chip" data-ycf="${k}" aria-pressed="${F.f===k}">${l} <span class="num">(${YC.filter(x=>x.status===k).length})</span></button>`).join("")}</div></div>
   <div class="card" style="padding:8px 12px">${list.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th class="r">الثمن</th><th></th></tr></thead><tbody>
-  ${list.map(r=>{const o=ycOrder(r),d=r.data||{},dup=F.f==="new"&&dupOf(o),known=ST.products.some(p=>p.name===o.pr),cityOk=cityFee(o.c)!=null;
+  ${list.map(r=>{const o=ycOrder(r),d=r.data||{},dup=F.f==="new"&&dupOf(o),known=ST.products.some(p=>p.name===o.pr),cp=cityPill(o.c,`data-ycc="${esc(r.id)}"`);
     return `<tr><td class="num">${esc(o.d.slice(5))}</td>
     <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small>${dup?`<small class="pill p-warn">كاينة طلبية بنفس النمرة (${esc(dup.d.slice(5))})</small>`:""}${custBadge(CM,o.p)}</div></td>
-    <td>${esc(o.c)}${cityOk?"":' <span class="pill p-warn" title="ما كايناش فاللائحة ديال COLIX">?</span>'}<div class="note">${esc(o.ad)}</div></td>
+    <td>${esc(o.c)}${cp}<div class="note">${esc(o.ad)}</div></td>
     <td>${esc(o.pr)}${o.q>1?" ×"+o.q:""}${known?"":' <span class="pill p-bad">ما عرفتوش</span>'}<div class="note">${esc([d.product,d.variant].filter(Boolean).join(" · "))}</div></td>
     <td class="r num">${nf.format(o.pz)}</td>
     <td style="white-space:nowrap">${F.f==="new"?`<button class="btn" data-ycok="${esc(r.id)}" style="padding:5px 12px">✓ Confirmé</button> <button class="btn sec" data-ycx="${esc(r.id)}" style="padding:5px 10px">${UI.ycArm===r.id?"متأكد؟":"✗"}</button>`:`<button class="btn sec" data-ycback="${esc(r.id)}" style="padding:5px 10px">رجعها للجداد</button>`}</td></tr>`}).join("")}
   </tbody></table></div>`:`<p class="empty">${F.f==="new"?"ما كاين حتى طلبية جديدة من YouCan.":"ما كاين والو هنا."}</p>`}</div>`;
   $("ycA").onchange=e=>{F.a=e.target.value};
   document.querySelectorAll("[data-ycf]").forEach(b=>b.onclick=()=>{F.f=b.dataset.ycf;viewYC()});
+  document.querySelectorAll("[data-ycc]").forEach(b=>b.onclick=async()=>{const r=YC.find(x=>x.id===b.dataset.ycc);if(!r)return;r.data={...(r.data||{}),city:b.dataset.city};viewYC();
+    const {error}=await SB.from("yc_inbox").update({data:r.data,updated_at:new Date().toISOString()}).eq("id",r.id);toast(error?failMsg(error):"✅ تصلحات المدينة: "+b.dataset.city)});
   const setSt=async(id,status)=>{const r=YC.find(x=>x.id===id);if(r)r.status=status;viewYC();updYCBadge();
     const {error}=await SB.from("yc_inbox").update({status,updated_at:new Date().toISOString()}).eq("id",id);if(error)toast(failMsg(error))};
   document.querySelectorAll("[data-ycok]").forEach(b=>b.onclick=async()=>{const r=YC.find(x=>x.id===b.dataset.ycok);if(!r)return;b.disabled=true;
@@ -912,7 +928,7 @@ function viewOrders(){
     ${pageRows.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th class="r">الثمن</th><th>المؤكدة</th><th>التأكيد</th><th>التوصيل</th><th>Tracking</th></tr></thead><tbody>
     ${pageRows.map(o=>`<tr class="click ${rowCls(o)}" data-id="${o.id}"><td class="num">${esc(o.d.slice(5))}</td>
       <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small>${custBadge(CM,o.p,o.id)}</div></td>
-      <td>${esc(o.c||"")}</td><td>${esc(o.pr)}${(o.q||1)>1?` ×${o.q}`:""}</td><td class="r num">${nf.format(o.pz||0)}</td><td>${esc(o.a||"")}</td>
+      <td>${esc(o.c||"")}${o.t||o.sent||o.imp||!fresh(o.d)?"":cityPill(o.c,`data-ofix="${o.id}"`)}</td><td>${esc(o.pr)}${(o.q||1)>1?` ×${o.q}`:""}</td><td class="r num">${nf.format(o.pz||0)}</td><td>${esc(o.a||"")}</td>
       <td>${o.t||o.sent?pillConf(o.cs):`<select class="mini" data-k="cs" data-id="${o.id}" aria-label="التأكيد">${opts(CONF.includes(o.cs)?CONF:[o.cs,...CONF],o.cs)}</select>`}</td>
       <td>${pillDeliv(o.ds)}</td>
       <td class="num" style="font-size:.75rem">${o.t?esc(o.t):o.cxErr?`<span class="pill p-bad" title="${esc(o.cxErr)}">COLIX رفض</span>`:o.sent?'<span class="pill p-info">تصيفطات لـ COLIX</span>':(o.cs==="Confirmé"&&!o.imp&&fresh(o.d)?'<span class="pill p-warn">ما تصيفطاتش</span>':"")}</td></tr>`).join("")}
@@ -926,7 +942,10 @@ function viewOrders(){
   $("ods").onchange=e=>{O.ds=e.target.value;re()};$("oa").onchange=e=>{O.a=e.target.value;re()};$("opr").onchange=e=>{O.pr=e.target.value;re()};
   bindArch(()=>{O.page=0;O.m="";viewOrders()});
   if($("pPrev")){$("pPrev").onclick=()=>{O.page--;viewOrders()};$("pNext").onclick=()=>{O.page++;viewOrders()}}
-  if($("addColis"))$("addColis").onclick=async()=>{const b=$("addColis");b.disabled=true;b.textContent="كيتصيفطو…";await pushOutbox(true);if($("addColis")){b.disabled=false}};
+  if($("addColis"))$("addColis").onclick=async()=>{const b=$("addColis");
+    const bad=outboxCandidates().filter(o=>!cityCheck(o.c).ok);
+    if(bad.length&&!O.cxArm){O.cxArm=true;b.textContent=`⚠ ${bad.length} فيهم المدينة غالطة · كليكي عاوتاني باش تصيفط`;toast("صلح المدينة ف: "+bad.map(o=>o.n).slice(0,5).join("، "));return}
+    O.cxArm=false;b.disabled=true;b.textContent="كيتصيفطو…";await pushOutbox(true);if($("addColis")){b.disabled=false}};
   if($("sentX"))$("sentX").onclick=()=>{O.sentRes=null;viewOrders()};
   $("pasteO").onclick=()=>{O.paste=!O.paste;viewOrders();if(O.paste)$("pasteTxt").focus()};
   if($("pasteX"))$("pasteX").onclick=()=>{O.paste=false;viewOrders()};
@@ -942,7 +961,9 @@ function viewOrders(){
     O.paste=false;viewOrders();
     try{await Promise.all([...touched].map(m=>writeOrders(m)));toast(`تبدلات ${ch} من ${items.length}`+(miss.length?` · ${miss.length} ما لقيتهومش`:""))}catch(e){toast(failMsg(e))}};
   $("newO").onclick=()=>{const p=ST.products[0]||{name:"",price:0};O.edit={id:null,d:today(),a:ST.confirmers[0]?.name||"",n:"",p:"",c:"",ad:"",pr:p.name,pz:p.price,q:1,cs:"Nouveau",ds:"",t:""};O.armed=false;viewOrders();window.scrollTo(0,0)};
-  document.querySelectorAll("tr.click").forEach(tr=>tr.onclick=e=>{if(e.target.closest("select,a"))return;const o=allOrders().find(x=>x.id===tr.dataset.id);if(o){O.edit=clone(o);O.armed=false;viewOrders();window.scrollTo(0,0)}});
+  document.querySelectorAll("[data-ofix]").forEach(b=>b.onclick=async e=>{e.stopPropagation();const o=allOrders().find(x=>x.id===b.dataset.ofix);if(!o)return;o.c=b.dataset.city;viewOrders();
+    try{await writeOrders(o.d.slice(0,7));toast("✅ تصلحات المدينة: "+o.c)}catch(err){toast(failMsg(err))}});
+  document.querySelectorAll("tr.click").forEach(tr=>tr.onclick=e=>{if(e.target.closest("select,a,button"))return;const o=allOrders().find(x=>x.id===tr.dataset.id);if(o){O.edit=clone(o);O.armed=false;viewOrders();window.scrollTo(0,0)}});
   document.querySelectorAll("select.mini").forEach(s=>s.onchange=async()=>{
     const o=allOrders().find(x=>x.id===s.dataset.id);if(!o)return;o[s.dataset.k]=s.value;if(!o.ds)delete o.ds;if(o.ds==="Livré"&&!o.ld)o.ld=today();if(o.ds!=="Livré")delete o.ld;
     try{await writeOrders(o.d.slice(0,7));toast("تبدلات الحالة")}catch(e){toast(failMsg(e))}
@@ -954,7 +975,7 @@ function orderForm(o){
   <div class="form">
     <label class="field">السمية<input id="f_n" required value="${esc(o.n)}"></label>
     <label class="field">التيليفون<input id="f_p" inputmode="tel" value="${esc(phone(o.p))}"><div class="who" id="f_hist">${custBadge(custMap(),o.p,o.id)}</div></label>
-    <label class="field">المدينة<input id="f_c" list="cityList" value="${esc(o.c)}"><datalist id="cityList">${Object.values(CITY).map(c=>`<option value="${esc(c.n)}"></option>`).join("")}</datalist></label>
+    <label class="field">المدينة<input id="f_c" list="cityList" value="${esc(o.c)}"><datalist id="cityList">${Object.values(CITY).map(c=>`<option value="${esc(c.n)}"></option>`).join("")}</datalist><div id="f_cchk">${o.c?cityPill(o.c,'data-ffix="1"'):""}</div></label>
     <label class="field">التاريخ<input id="f_d" type="date" required value="${esc(o.d)}"></label>
     <label class="field wide">العنوان<input id="f_ad" value="${esc(o.ad)}"></label>
     <label class="field">المنتوج<select id="f_pr">${opts([...new Set([...actP(),o.pr].filter(Boolean))],o.pr)}</select></label>
@@ -979,6 +1000,8 @@ function bindOrderForm(){
   }
   $("f_pr").onchange=e=>{const p=prodOf(e.target.value);if(p.price)$("f_pz").value=p.price*(+$("f_q").value||1)};
   $("fCancel").onclick=()=>{O.edit=null;viewOrders()};
+  {const chk=()=>{const v=$("f_c").value;$("f_cchk").innerHTML=v.trim()?cityPill(v,'data-ffix="1"'):"";const b=$("f_cchk").querySelector("[data-ffix]");if(b)b.onclick=()=>{$("f_c").value=b.dataset.city;$("f_c").dispatchEvent(new Event("input"))}};
+   $("f_c").addEventListener("input",chk);chk()}
   $("f_c").addEventListener("input",()=>{const f=cityFee($("f_c").value);$("f_f").placeholder=f??ST.delivFee;$("f_fl").textContent="ثمن التوصيل (DH)"+(f!=null?" · أوتوماتيك":Object.keys(CITY).length&&$("f_c").value.trim()?" · المدينة ما كايناش فاللائحة":"")});
   if($("fDel"))$("fDel").onclick=async()=>{
     if(!O.armed){O.armed=true;$("fDel").textContent="متأكد؟ كليكي مرة أخرى";return}
