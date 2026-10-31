@@ -267,13 +267,24 @@ function archChip(){return ST.start&&allOrders().some(o=>!freshO(o))?`<button cl
 function bindArch(fn){const b=$("arch");if(b)b.onclick=()=>{UI.archive=!UI.archive;if(!UI.archive&&UI.dash.from<ST.start)setPreset("all");fn()}}
 function prodOf(name){return ST.products.find(p=>p.name===name)||{name,cost:0,price:0,pack:1}}
 function confFee(a){const c=ST.confirmers.find(x=>x.name===a);return c?+c.fee||0:0}
-/* ================= customer history by phone (all past BIDABELL orders) ================= */
-function custMap(){const m=new Map();for(const x of allOrders()){const k=phone(x.p);if(k.length<9)continue;if(!m.has(k))m.set(k,[]);m.get(k).push(x)}return m}
-function custBadge(m,p,selfId){const k=phone(p);if(k.length<9)return "";const L=(m.get(k)||[]).filter(x=>x.id!==selfId);
+/* ================= customer history by phone (all BIDABELL orders, old + new) ================= */
+/* every Moroccan number found in a phone field -> 9-digit key (handles +212, 00212, spaces, two numbers in one field) */
+function phKeys(p){const s=String(p||""),out=new Set();
+  (s.match(/(?:\+|00)?(?:212)?[\s.\-]*0?[\s.\-]*[5-7](?:[\s.\-]*\d){8}/g)||[]).forEach(x=>{let d=x.replace(/\D/g,"");if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("212"))d=d.slice(3);if(d.startsWith("0"))d=d.slice(1);if(d.length===9)out.add(d)});
+  if(!out.size){const d=s.replace(/\D/g,"");if(d.length>=9)out.add(d.slice(-9))}
+  return [...out]}
+function custMap(){const m=new Map();for(const x of allOrders())for(const k of phKeys(x.p)){if(!m.has(k))m.set(k,[]);m.get(k).push(x)}return m}
+function custBadge(m,p,selfId){const ks=phKeys(p);if(!ks.length)return "";
+  const seen=new Set(),L=[];ks.forEach(k=>(m.get(k)||[]).forEach(x=>{if(x.id!==selfId&&!seen.has(x.id)){seen.add(x.id);L.push(x)}}));
   if(!L.length)return `<small class="pill p-info">🆕 زبون جديد</small>`;
-  let del=0,ret=0,can=0,tr=0;for(const x of L){const g=dGroup(x);if(g==="del")del++;else if(g==="ret")ret++;else if(CANCEL.has(x.cs))can++;else tr++}
-  const tip=L.slice().sort((a,b)=>b.d.localeCompare(a.d)).slice(0,8).map(x=>`${x.d} · ${x.pr||""} · ${x.ds||x.cs||""}`).join("\n");
-  const P=[];if(del)P.push(`<span class="pill p-good">✓ ${del} توصلات</span>`);if(ret)P.push(`<span class="pill p-bad">↩ ${ret} رجعات</span>`);if(can)P.push(`<span class="pill p-warn">✗ ${can} ملغية</span>`);if(tr)P.push(`<span class="pill p-none">${tr} أخرى</span>`);
+  L.sort((a,b)=>b.d.localeCompare(a.d));
+  let del=0,ret=0,can=0;const live=[];
+  for(const x of L){const g=dGroup(x);if(g==="del")del++;else if(g==="ret")ret++;else if(CANCEL.has(x.cs))can++;else live.push(x)}
+  const tip=L.slice(0,10).map(x=>`${x.d} · ${x.pr||""} · ${x.ds||x.cs||""}${x.t?" · "+x.t:""}`).join("\n");
+  const P=[];
+  live.forEach(x=>{const st=x.ds?`🚚 ${x.ds}`:(x.t||x.sent)?"🚚 تصيفطات لـ COLIX":x.cs==="Confirmé"?"⏳ مأكدة، ما تصيفطاتش":`⏳ ${x.cs||"Nouveau"}`;
+    P.push(`<span class="pill p-warn">${esc(st)} · ${esc(x.d.slice(5))}</span>`)});
+  if(del)P.push(`<span class="pill p-good">✓ ${del} توصلات</span>`);if(ret)P.push(`<span class="pill p-bad">↩ ${ret} رجعات</span>`);if(can)P.push(`<span class="pill p-none">✗ ${can} ملغية</span>`);
   const risk=ret>del?`<span class="pill p-bad">⚠ حضي</span>`:"";
   return `<small class="hist" title="${esc(tip)}">${risk}${P.join(" ")}</small>`}
 function dGroup(o){if(!o.ds)return "none";if(o.ds==="Livré")return "del";if(RET.has(o.ds))return "ret";return "transit"}
