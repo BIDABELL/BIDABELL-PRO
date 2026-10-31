@@ -942,7 +942,7 @@ function orderForm(o){
   return `<form class="card" id="oform" autocomplete="off"><div class="head"><h2>${o.id?"تعديل الطلبية":"طلبية جديدة"}</h2></div>
   <div class="form">
     <label class="field">السمية<input id="f_n" required value="${esc(o.n)}"></label>
-    <label class="field">التيليفون<input id="f_p" inputmode="tel" value="${esc(phone(o.p))}"></label>
+    <label class="field">التيليفون<input id="f_p" inputmode="tel" value="${esc(phone(o.p))}"><div class="who" id="f_hist">${custBadge(custMap(),o.p,o.id)}</div></label>
     <label class="field">المدينة<input id="f_c" list="cityList" value="${esc(o.c)}"><datalist id="cityList">${Object.values(CITY).map(c=>`<option value="${esc(c.n)}"></option>`).join("")}</datalist></label>
     <label class="field">التاريخ<input id="f_d" type="date" required value="${esc(o.d)}"></label>
     <label class="field wide">العنوان<input id="f_ad" value="${esc(o.ad)}"></label>
@@ -975,6 +975,7 @@ function bindOrderForm(){
     ORD[m]=(ORD[m]||[]).filter(x=>x.id!==old.id);O.edit=null;viewOrders();
     try{await writeOrders(m);toast("تمسحات الطلبية")}catch(e){toast(failMsg(e))}
   };
+  {const CMf=custMap();$("f_p").oninput=e=>{$("f_hist").innerHTML=custBadge(CMf,e.target.value,O.edit&&O.edit.id)}}
   $("oform").onsubmit=async e=>{
     e.preventDefault();
     const v=id=>$(id).value.trim(),n=x=>{const f=parseFloat(String(x).replace(",","."));return isFinite(f)?f:null};
