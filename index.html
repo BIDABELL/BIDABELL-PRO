@@ -111,6 +111,7 @@ td select.mini{border:1px solid transparent;background:transparent;border-radius
 td select.mini:hover{border-color:var(--line)}
 .who{display:flex;flex-direction:column;min-width:0}
 .who small{color:var(--muted)}
+.who .hist{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;cursor:help}
 a.wa{color:var(--good);text-decoration:none;font-weight:600;font-size:.78rem}
 
 .list{display:flex;flex-direction:column}
@@ -266,6 +267,15 @@ function archChip(){return ST.start&&allOrders().some(o=>!freshO(o))?`<button cl
 function bindArch(fn){const b=$("arch");if(b)b.onclick=()=>{UI.archive=!UI.archive;if(!UI.archive&&UI.dash.from<ST.start)setPreset("all");fn()}}
 function prodOf(name){return ST.products.find(p=>p.name===name)||{name,cost:0,price:0,pack:1}}
 function confFee(a){const c=ST.confirmers.find(x=>x.name===a);return c?+c.fee||0:0}
+/* ================= customer history by phone (all past BIDABELL orders) ================= */
+function custMap(){const m=new Map();for(const x of allOrders()){const k=phone(x.p);if(k.length<9)continue;if(!m.has(k))m.set(k,[]);m.get(k).push(x)}return m}
+function custBadge(m,p,selfId){const k=phone(p);if(k.length<9)return "";const L=(m.get(k)||[]).filter(x=>x.id!==selfId);
+  if(!L.length)return `<small class="pill p-info">🆕 زبون جديد</small>`;
+  let del=0,ret=0,can=0,tr=0;for(const x of L){const g=dGroup(x);if(g==="del")del++;else if(g==="ret")ret++;else if(CANCEL.has(x.cs))can++;else tr++}
+  const tip=L.slice().sort((a,b)=>b.d.localeCompare(a.d)).slice(0,8).map(x=>`${x.d} · ${x.pr||""} · ${x.ds||x.cs||""}`).join("\n");
+  const P=[];if(del)P.push(`<span class="pill p-good">✓ ${del} توصلات</span>`);if(ret)P.push(`<span class="pill p-bad">↩ ${ret} رجعات</span>`);if(can)P.push(`<span class="pill p-warn">✗ ${can} ملغية</span>`);if(tr)P.push(`<span class="pill p-none">${tr} أخرى</span>`);
+  const risk=ret>del?`<span class="pill p-bad">⚠ حضي</span>`:"";
+  return `<small class="hist" title="${esc(tip)}">${risk}${P.join(" ")}</small>`}
 function dGroup(o){if(!o.ds)return "none";if(o.ds==="Livré")return "del";if(RET.has(o.ds))return "ret";return "transit"}
 function money(o){
   const P=prodOf(o.pr),g=dGroup(o),r={rev:0,prod:0,deliv:0,pack:0,conf:0,ret:0};
@@ -617,6 +627,7 @@ function ycOrder(r){const d=r.data||{};const pr=normProd((d.product||"")+" "+(d.
 function viewYC(){
   const F=UI.yc||(UI.yc={f:"new",a:"SOMIA"});
   const list=YC.filter(x=>x.status===F.f);
+  const CM=custMap();
   const conf=actC().filter(n=>n!=="LAHOUCINE");if(!conf.includes(F.a))F.a=conf[0]||"";
   const dupOf=o=>allOrders().find(x=>phone(x.p)===phone(o.p)&&x.d>=shiftDays(o.d,-3));
   $("view").innerHTML=`
@@ -626,7 +637,7 @@ function viewYC(){
   <div class="card" style="padding:8px 12px">${list.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th class="r">الثمن</th><th></th></tr></thead><tbody>
   ${list.map(r=>{const o=ycOrder(r),d=r.data||{},dup=F.f==="new"&&dupOf(o),known=ST.products.some(p=>p.name===o.pr),cityOk=cityFee(o.c)!=null;
     return `<tr><td class="num">${esc(o.d.slice(5))}</td>
-    <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small>${dup?`<small class="pill p-warn">كاينة طلبية بنفس النمرة (${esc(dup.d.slice(5))})</small>`:""}</div></td>
+    <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small>${dup?`<small class="pill p-warn">كاينة طلبية بنفس النمرة (${esc(dup.d.slice(5))})</small>`:""}${custBadge(CM,o.p)}</div></td>
     <td>${esc(o.c)}${cityOk?"":' <span class="pill p-warn" title="ما كايناش فاللائحة ديال COLIX">?</span>'}<div class="note">${esc(o.ad)}</div></td>
     <td>${esc(o.pr)}${o.q>1?" ×"+o.q:""}${known?"":' <span class="pill p-bad">ما عرفتوش</span>'}<div class="note">${esc([d.product,d.variant].filter(Boolean).join(" · "))}</div></td>
     <td class="r num">${nf.format(o.pz)}</td>
@@ -866,7 +877,7 @@ function viewOrders(){
     &&(!q||[o.n,o.p,phone(o.p),o.c,o.t,o.ad].some(x=>String(x||"").toLowerCase().includes(q))));
   list.sort((a,b)=>b.d.localeCompare(a.d)||b.id.localeCompare(a.id));
   const per=50,pages=Math.max(1,Math.ceil(list.length/per));if(O.page>=pages)O.page=pages-1;
-  const pageRows=list.slice(O.page*per,O.page*per+per);
+  const pageRows=list.slice(O.page*per,O.page*per+per);const CM=custMap();
   const ed=O.edit;
   $("view").innerHTML=`
   <div class="head"><div><h1>الطلبيات</h1><div class="sub">${nf.format(list.length)} طلبية</div></div>
@@ -889,7 +900,7 @@ function viewOrders(){
   <div class="card" style="padding:8px 12px">
     ${pageRows.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th class="r">الثمن</th><th>المؤكدة</th><th>التأكيد</th><th>التوصيل</th><th>Tracking</th></tr></thead><tbody>
     ${pageRows.map(o=>`<tr class="click ${rowCls(o)}" data-id="${o.id}"><td class="num">${esc(o.d.slice(5))}</td>
-      <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small></div></td>
+      <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small>${custBadge(CM,o.p,o.id)}</div></td>
       <td>${esc(o.c||"")}</td><td>${esc(o.pr)}${(o.q||1)>1?` ×${o.q}`:""}</td><td class="r num">${nf.format(o.pz||0)}</td><td>${esc(o.a||"")}</td>
       <td>${o.t||o.sent?pillConf(o.cs):`<select class="mini" data-k="cs" data-id="${o.id}" aria-label="التأكيد">${opts(CONF.includes(o.cs)?CONF:[o.cs,...CONF],o.cs)}</select>`}</td>
       <td>${pillDeliv(o.ds)}</td>
