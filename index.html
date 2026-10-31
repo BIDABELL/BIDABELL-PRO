@@ -504,7 +504,7 @@ let pubT=null,PUB_HASH={};
 function confPayload(name){
   const c=ST.confirmers.find(x=>x.name===name)||{name,fee:0};
   const A=confAccount(name);
-  const pays=(ST.payouts||[]).filter(p=>p.c===name).map(p=>({date:p.date,amount:+p.amount||0,note:p.note||"",proof:p.proof||""}));
+  const pays=(ST.payouts||[]).filter(p=>p.c===name).map(p=>({date:p.date,amount:+p.amount||0,note:p.note||"",proof:p.proof||"",...(p.kind==="bonus"?{kind:"bonus"}:{})}));
   return {name,fee:+c.fee||0,paid:A.paid,pays,acct:{oldN:A.oldN,newN:A.newN,eOld:A.eOld,eNew:A.eNew,paid:A.paid,due:A.due,dueOld:A.dueOld,dueNew:A.dueNew},start:ST.start||""};
 }
 function schedulePublish(){if(!ISOWNER||!SB)return;clearTimeout(pubT);pubT=setTimeout(publishConf,2500)}
@@ -576,7 +576,7 @@ function viewConfirmer(){
     <div class="kpi"><span class="l">التوصيل</span><span class="v num">${pct(del.length,conf.length)}</span><span class="s">${del.length} توصلات · ${ret.length} رجعات</span></div>
     <div class="kpi"><span class="l">العمولة على كل طلبية توصلات</span><span class="v num">${dh(+d.fee||0)}</span></div>
   </div>
-  ${(d.pays||[]).length?`<div class="card"><h2>الخلاص ديالك</h2><div class="list">${d.pays.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<div class="li"><span><small class="num">${esc(p.date)}</small>${p.note?` · ${esc(p.note)}`:""}${p.proof?" · "+proofLink(p.proof,"شوفي الفيرمو"):""}</span><span class="num">${dh(p.amount)}</span></div>`).join("")}</div></div>`:""}
+  ${(d.pays||[]).length?`<div class="card"><h2>الخلاص ديالك</h2><div class="list">${d.pays.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<div class="li"><span><small class="num">${esc(p.date)}</small>${p.kind==="bonus"?' <span class="pill p-good">🎁 بونيس</span>':""}${p.note?` · ${esc(p.note)}`:""}${p.proof?" · "+proofLink(p.proof,"شوفي الفيرمو"):""}</span><span class="num">${dh(p.amount)}</span></div>`).join("")}</div></div>`:""}
   ${(()=>{const op=CV.open&&L.find(x=>x.id===CV.open);return op?`<div id="trkBox"><div class="head" style="margin-bottom:6px"><b>${esc(op.n)} · ${esc(op.c||"")}</b><button class="btn sec" type="button" id="trkX" style="padding:4px 10px">سد</button></div>${trackPanel(op)}</div>`:""})()}
   <div class="card" style="padding:12px"><div class="bar">${Object.keys(labels).map(k=>`<button class="chip" data-cf="${k}" aria-pressed="${CV.filter===k}">${labels[k]} <span class="num">(${L.filter(F[k]).length})</span></button>`).join("")}</div></div>
   <div class="card" style="padding:8px 12px">${list.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th class="r">الثمن</th><th>التأكيد</th><th>ملاحظة</th><th>التوصيل</th><th>Tracking</th></tr></thead><tbody>
@@ -1074,7 +1074,8 @@ async function uploadProof(file,who){
 function confAccount(name){
   const c=ST.confirmers.find(x=>x.name===name)||{fee:0},fee=+c.fee||0,seen=new Set();let oldN=0,newN=0;
   allOrders().forEach(o=>{if(o.a!==name||o.ds!=="Livré")return;const k=o.t||o.id;if(seen.has(k))return;seen.add(k);if(freshO(o))newN++;else oldN++});
-  const paid=(ST.payouts||[]).filter(p=>p.c===name).reduce((a,p)=>a+(+p.amount||0),0);
+  /* a bonus is a gift on top: it is listed with the payments but does not pay off commissions */
+  const paid=(ST.payouts||[]).filter(p=>p.c===name&&p.kind!=="bonus").reduce((a,p)=>a+(+p.amount||0),0);
   const eOld=oldN*fee,eNew=newN*fee,dueOld=Math.max(0,eOld-paid),dueNew=Math.max(0,eNew-Math.max(0,paid-eOld));
   return {fee,oldN,newN,eOld,eNew,paid,dueOld,dueNew,due:eOld+eNew-paid};
 }
@@ -1102,7 +1103,7 @@ function viewConf(){
   ${rows.filter(x=>x.A.fee).map(({c,A})=>`<tr><td><b>${esc(c.name)}</b></td><td class="r num">${A.oldN}</td><td class="r num">${dh(A.eOld)}</td><td class="r num">${A.newN}</td><td class="r num">${dh(A.eNew)}</td><td class="r num">${dh(A.paid)}</td><td class="r num">${dh(A.dueOld)}</td><td class="r num">${dh(A.dueNew)}</td><td class="r"><b class="num">${dh(A.due)}</b></td></tr>`).join("")}
   </tbody></table></div><p class="note">إلا كنتي خلصتي شي وحدة قبل وما مسجلش هنا، كليكي "خلص" وكتب المبلغ وتاريخ قديم.</p></div>
   <div class="card"><h2>سجل الخلاص</h2>
-  ${pays.length?`<div class="list">${pays.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<div class="li"><span><b>${esc(p.c)}</b> <small class="num">${esc(p.date)}</small>${p.note?` <small>· ${esc(p.note)}</small>`:""}
+  ${pays.length?`<div class="list">${pays.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<div class="li"><span><b>${esc(p.c)}</b> <small class="num">${esc(p.date)}</small>${p.kind==="bonus"?' <span class="pill p-good">🎁 بونيس</span>':""}${p.note?` <small>· ${esc(p.note)}</small>`:""}
     ${p.proof&&/^sb:/.test(p.proof)?" · "+proofLink(p.proof,"شوف الفيرمو"):` · <label style="color:var(--muted);cursor:pointer;text-decoration:underline">+ زيد تصويرة<input type="file" accept="image/*,application/pdf" data-proof="${esc(p.id)}" hidden></label>`}</span><span class="num">${dh(+p.amount)}</span></div>`).join("")}</div>`:'<p class="empty">ما كاين حتى خلاص مسجل</p>'}</div>`;
   document.querySelectorAll("[data-proof]").forEach(i=>i.onchange=async()=>{const f=i.files[0];if(!f)return;toast("كيتحمل…");const pp=(ST.payouts||[]).find(p=>p.id===i.dataset.proof);const id=await uploadProof(f,pp&&pp.c);if(!id)return;
     ST.payouts=(ST.payouts||[]).map(p=>p.id===i.dataset.proof?{...p,proof:id}:p);try{await writeSettings();toast("تزادت التصويرة");viewConf()}catch(e){toast(failMsg(e))}});
@@ -1112,6 +1113,7 @@ function viewConf(){
   document.querySelectorAll("[data-pay]").forEach(b=>b.onclick=()=>{
     $("payBox").innerHTML=`<form class="card" id="payF"><h2>خلص ${esc(b.dataset.pay)}</h2><div class="form">
       <label class="field">المبلغ (DH)<input id="pAmt" inputmode="decimal" value="${b.dataset.due}"></label>
+      <label class="field">النوع<select id="pKind"><option value="">عمولة</option><option value="bonus">🎁 بونيس (هدية زايدة، ما كتنقصش من العمولة)</option></select></label>
       <label class="field">التاريخ<input id="pDate" type="date" value="${today()}"></label>
       <label class="field">ملاحظة<input id="pNote" placeholder="مثلا: فيرمو"></label>
       <label class="field wide">تصويرة ديال الفيرمو (اختياري)<input id="pProof" type="file" accept="image/*,application/pdf"></label></div>
@@ -1120,7 +1122,7 @@ function viewConf(){
     $("payF").onsubmit=async e=>{e.preventDefault();const a=parseFloat($("pAmt").value.replace(",","."));if(!(a>0))return;
       const f=$("pProof").files[0];let proof="";
       if(f){const sb=$("payF").querySelector("[type=submit]");sb.disabled=true;sb.textContent="كيتحمل…";proof=await uploadProof(f,b.dataset.pay);if(proof===null){sb.disabled=false;sb.textContent="سجل الخلاص";return}}
-      ST.payouts=[...(ST.payouts||[]),{id:uid("p"),c:b.dataset.pay,amount:a,date:$("pDate").value||today(),note:$("pNote").value.trim(),...(proof?{proof}:{})}];
+      ST.payouts=[...(ST.payouts||[]),{id:uid("p"),c:b.dataset.pay,amount:a,date:$("pDate").value||today(),note:$("pNote").value.trim(),...($("pKind").value==="bonus"?{kind:"bonus"}:{}),...(proof?{proof}:{})}];
       viewConf();try{await writeSettings();toast("تسجل الخلاص")}catch(err){toast(failMsg(err))}};
   });
 }
