@@ -111,6 +111,9 @@ td select.mini{border:1px solid transparent;background:transparent;border-radius
 td select.mini:hover{border-color:var(--line)}
 .who{display:flex;flex-direction:column;min-width:0}
 .who small{color:var(--muted)}
+.pimg{width:42px;height:42px;object-fit:cover;border-radius:8px;background:var(--sunken);flex:none}
+.pcell{display:flex;align-items:center;gap:8px}
+.pimg.ph{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.1rem}
 .who .hist{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;cursor:help}
 a.wa{color:var(--good);text-decoration:none;font-weight:600;font-size:.78rem}
 
@@ -280,6 +283,12 @@ function curOrders(){return allOrders().filter(o=>UI.archive||freshO(o))}
 function curExp(){return allExp().filter(e=>UI.archive||fresh(e.date))}
 function archChip(){return ST.start&&allOrders().some(o=>!freshO(o))?`<button class="chip" id="arch" aria-pressed="${UI.archive}">${UI.archive?"كنشوف الأرشيف":"وري الطلبيات القديمة"}</button>`:""}
 function bindArch(fn){const b=$("arch");if(b)b.onclick=()=>{UI.archive=!UI.archive;if(!UI.archive&&UI.dash.from<ST.start)setPreset("all");fn()}}
+/* product photo: from the YouCan order itself if it carries one, else the photo set in Settings */
+function prodImg(name,raw){const u=raw&&(raw.image||raw.img||raw.thumbnail||raw.product_image);const p=ST.products.find(x=>x.name===name);const src=(typeof u==="string"&&/^https:\/\//.test(u))?u:(p&&p.img)||"";
+  return src?`<img class="pimg" src="${esc(src)}" alt="" loading="lazy">`:`<span class="pimg ph" aria-hidden="true">📦</span>`}
+function shrinkImg(file,max){return new Promise((ok,no)=>{const r=new FileReader();r.onerror=no;r.onload=()=>{const im=new Image();im.onerror=no;im.onload=()=>{
+  const k=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);
+  c.getContext("2d").drawImage(im,0,0,c.width,c.height);ok(c.toDataURL("image/jpeg",.82))};im.src=r.result};r.readAsDataURL(file)})}
 function prodOf(name){return ST.products.find(p=>p.name===name)||{name,cost:0,price:0,pack:1}}
 function confFee(a){const c=ST.confirmers.find(x=>x.name===a);return c?+c.fee||0:0}
 /* ================= customer history by phone (all BIDABELL orders, old + new) ================= */
@@ -665,7 +674,7 @@ function viewYC(){
     return `<tr><td class="num">${esc(o.d.slice(5))}</td>
     <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small>${dup?`<small class="pill p-warn">كاينة طلبية بنفس النمرة (${esc(dup.d.slice(5))})</small>`:""}${custBadge(CM,o.p)}</div></td>
     <td>${esc(o.c)}${cp}<div class="note">${esc(o.ad)}</div></td>
-    <td>${esc(o.pr)}${o.q>1?" ×"+o.q:""}${known?"":' <span class="pill p-bad">ما عرفتوش</span>'}<div class="note">${esc([d.product,d.variant].filter(Boolean).join(" · "))}</div></td>
+    <td><div class="pcell">${prodImg(o.pr,d)}<div>${esc(o.pr)}${o.q>1?" ×"+o.q:""}${known?"":' <span class="pill p-bad">ما عرفتوش</span>'}<div class="note">${esc([d.product,d.variant].filter(Boolean).join(" · "))}</div></div></div></td>
     <td class="r num">${nf.format(o.pz)}</td>
     <td style="white-space:nowrap">${F.f==="new"?`<button class="btn" data-ycok="${esc(r.id)}" style="padding:5px 12px">✓ Confirmé</button> <button class="btn sec" data-ycx="${esc(r.id)}" style="padding:5px 10px">${UI.ycArm===r.id?"متأكد؟":"✗"}</button>`:`<button class="btn sec" data-ycback="${esc(r.id)}" style="padding:5px 10px">رجعها للجداد</button>`}</td></tr>`}).join("")}
   </tbody></table></div>`:`<p class="empty">${F.f==="new"?"ما كاين حتى طلبية جديدة من YouCan.":"ما كاين والو هنا."}</p>`}</div>`;
@@ -929,7 +938,7 @@ function viewOrders(){
     ${pageRows.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th class="r">الثمن</th><th>المؤكدة</th><th>التأكيد</th><th>التوصيل</th><th>Tracking</th></tr></thead><tbody>
     ${pageRows.map(o=>`<tr class="click ${rowCls(o)}" data-id="${o.id}"><td class="num">${esc(o.d.slice(5))}</td>
       <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small>${custBadge(CM,o.p,o.id)}</div></td>
-      <td>${esc(o.c||"")}${o.t||o.sent||o.imp||!fresh(o.d)?"":cityPill(o.c,`data-ofix="${o.id}"`)}</td><td>${esc(o.pr)}${(o.q||1)>1?` ×${o.q}`:""}</td><td class="r num">${nf.format(o.pz||0)}</td><td>${esc(o.a||"")}</td>
+      <td>${esc(o.c||"")}${o.t||o.sent||o.imp||!fresh(o.d)?"":cityPill(o.c,`data-ofix="${o.id}"`)}</td><td><div class="pcell">${prodImg(o.pr)}<span>${esc(o.pr)}${(o.q||1)>1?` ×${o.q}`:""}</span></div></td><td class="r num">${nf.format(o.pz||0)}</td><td>${esc(o.a||"")}</td>
       <td>${o.t||o.sent?pillConf(o.cs):`<select class="mini" data-k="cs" data-id="${o.id}" aria-label="التأكيد">${opts(CONF.includes(o.cs)?CONF:[o.cs,...CONF],o.cs)}</select>`}</td>
       <td>${pillDeliv(o.ds)}</td>
       <td class="num" style="font-size:.75rem">${o.t?esc(o.t):o.cxErr?`<span class="pill p-bad" title="${esc(o.cxErr)}">COLIX رفض</span>`:o.sent?'<span class="pill p-info">تصيفطات لـ COLIX</span>':(o.cs==="Confirmé"&&!o.imp&&fresh(o.d)?'<span class="pill p-warn">ما تصيفطاتش</span>':"")}</td></tr>`).join("")}
@@ -1228,8 +1237,8 @@ function viewSettings(){
   <div class="head"><div><h1>الإعدادات</h1><div class="sub">هاد الأرقام هي اللي كيتحسب بيها الربح</div></div></div>
   <form class="card" id="sform" autocomplete="off">
     <h2>المنتوجات</h2>
-    <div class="tw"><table><thead><tr><th>السمية</th><th>ثمن الشرا</th><th>ثمن البيع</th><th>التغليف</th><th></th></tr></thead><tbody>
-    ${ST.products.map((p,i)=>`<tr style="${p.off?"opacity:.5":""}"><td><input class="inp" id="pn${i}" value="${esc(p.name)}" style="min-width:170px" aria-label="السمية"></td><td><input class="inp num" id="pc${i}" value="${p.cost}" style="width:80px" aria-label="ثمن الشرا"></td><td><input class="inp num" id="pp${i}" value="${p.price}" style="width:80px" aria-label="ثمن البيع"></td><td><input class="inp num" id="pk${i}" value="${p.pack}" style="width:60px" aria-label="التغليف"></td><td><button type="button" class="btn sec" data-rmp="${i}" style="padding:4px 10px">${p.off?"رجع":(UI.rmArm==="p"+i?"متأكد؟":"وقف")}</button></td></tr>`).join("")}
+    <div class="tw"><table><thead><tr><th>التصويرة</th><th>السمية</th><th>ثمن الشرا</th><th>ثمن البيع</th><th>التغليف</th><th></th></tr></thead><tbody>
+    ${ST.products.map((p,i)=>`<tr style="${p.off?"opacity:.5":""}"><td><label style="cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;gap:2px" title="بدل التصويرة">${prodImg(p.name)}<small style="font-size:.7rem;color:var(--info)">${p.img?"بدل":"زيد"}</small><input type="file" accept="image/*" data-pimg="${i}" hidden></label>${p.img?` <button type="button" class="btn sec" data-pimgx="${i}" style="padding:2px 6px;font-size:.7rem" aria-label="حيد التصويرة">✗</button>`:""}</td><td><input class="inp" id="pn${i}" value="${esc(p.name)}" style="min-width:170px" aria-label="السمية"></td><td><input class="inp num" id="pc${i}" value="${p.cost}" style="width:80px" aria-label="ثمن الشرا"></td><td><input class="inp num" id="pp${i}" value="${p.price}" style="width:80px" aria-label="ثمن البيع"></td><td><input class="inp num" id="pk${i}" value="${p.pack}" style="width:60px" aria-label="التغليف"></td><td><button type="button" class="btn sec" data-rmp="${i}" style="padding:4px 10px">${p.off?"رجع":(UI.rmArm==="p"+i?"متأكد؟":"وقف")}</button></td></tr>`).join("")}
     </tbody></table></div>
     <div><button type="button" class="btn sec" id="addP">+ منتوج جديد</button></div>
     <h2>المؤكدات</h2>
@@ -1275,6 +1284,9 @@ function viewSettings(){
     ST.confirmers=ST.confirmers.map((c,i)=>({...c,name:$("cn"+i).value.trim().toUpperCase()||c.name,fee:n($("cf"+i).value)}));
     ST.delivFee=n($("sDf").value);ST.returnFee=n($("sRf").value);ST.rate=n($("sRate").value)||9.33;ST.lowStock=n($("sLow").value)||15;
   };
+  document.querySelectorAll("[data-pimg]").forEach(inp=>inp.onchange=async()=>{const f=inp.files[0];if(!f)return;
+    try{const url=await shrinkImg(f,240);collect();ST.products[+inp.dataset.pimg].img=url;viewSettings();await writeSettings();toast("✅ تسجلات التصويرة")}catch(e){toast("ما قدرتش نقرا التصويرة")}});
+  document.querySelectorAll("[data-pimgx]").forEach(b=>b.onclick=async()=>{collect();delete ST.products[+b.dataset.pimgx].img;viewSettings();try{await writeSettings();toast("تحيدات التصويرة")}catch(e){toast(failMsg(e))}});
   $("addP").onclick=()=>{collect();ST.products.push({name:"منتوج جديد",cost:0,price:0,pack:1,stock0:0});viewSettings()};
   $("addC").onclick=()=>{collect();ST.confirmers.push({name:"NOUVELLE",fee:10});viewSettings()};
   /* "وقف" hides an item from new orders but keeps it, so old orders, costs and commissions stay correct */
