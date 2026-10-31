@@ -139,6 +139,20 @@ button.li.on{background:var(--gold-soft)}
 .toast span{background:var(--navy);color:var(--navy-ink);padding:10px 16px;border-radius:12px;font-size:.9rem;opacity:0;transform:translateY(8px);transition:.2s}
 .toast span.show{opacity:1;transform:none}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* phone: logo + small buttons on the first line, the sections on their own scrollable line */
+@media (max-width:700px){
+  .top .inner{gap:6px 8px;padding-block:8px}
+  .brand img{height:28px!important}
+  nav{order:10;flex:0 0 100%;margin-inline:-4px;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+  nav a{padding:6px 11px;font-size:.88rem;background:color-mix(in srgb,var(--navy-ink) 7%,transparent)}
+  #syncBtn{margin-inline-start:auto;font-size:0!important;padding:6px 10px!important}
+  #syncBtn::before{content:"🔄";font-size:1rem}
+  #themeBtn,#outBtn{padding:5px 9px!important}
+  .sync{display:none}
+  main{padding-block:12px 40px}
+  h1{font-size:1.2rem}
+  .kpi .v{font-size:1.15rem}
+}
 </style>
 </head>
 <body>
