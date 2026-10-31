@@ -583,7 +583,7 @@ function viewConfirmer(){
   ${list.map(o=>`<tr class="${rowCls(o)} ${o.t?"click":""}" data-co="${esc(o.id)}"><td class="num">${esc(o.d.slice(5))}</td><td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small></div></td><td>${esc(o.c||"")}</td><td>${esc(o.pr)}${(o.q||1)>1?" ×"+o.q:""}</td><td class="r num">${nf.format(o.pz||0)}</td>
     <td>${locked(o)?pillConf(o.cs):`<select class="mini" data-ccs="${esc(o.id)}" aria-label="التأكيد">${opts(CONF.includes(o.cs)?CONF:[o.cs,...CONF],o.cs)}</select>`}</td>
     <td>${locked(o)?esc(o.rem||""):`<input class="inp" data-crem="${esc(o.id)}" value="${esc(o.rem||"")}" placeholder="…" style="min-width:120px;padding:4px 8px" aria-label="ملاحظة">`}</td>
-    <td>${pillDeliv(o.ds)}</td><td class="num" style="font-size:.75rem">${o.t?`${esc(o.t)} <span style="color:var(--info)">${CV.open===o.id?"▲":"▼ تفاصيل"}</span>`:""}</td></tr>`).join("")}
+    <td>${pillDeliv(o.ds)}</td><td class="num" style="font-size:.75rem">${o.t?`${esc(o.t)} <span style="color:var(--info)">${CV.open===o.id?"▲":"▼ تفاصيل"}</span>${agentCell(o)}`:""}</td></tr>`).join("")}
   </tbody></table></div><p class="note">كليكي على شي طلبية فيها Tracking باش تشوفي المراحل ديالها والنمرة ديال الليفرور.</p>`:`<p class="empty">ما كاين حتى طلبية ف "${labels[CV.filter]}"</p>`}</div>`;
   document.querySelectorAll("[data-cf]").forEach(b=>b.onclick=()=>{CV.filter=b.dataset.cf;viewConfirmer()});
   bindProofLinks();bindTrack();
@@ -609,6 +609,9 @@ function cxFlat(obj,pre,out){out=out||[];if(!obj||typeof obj!=="object")return o
     else if(v!=null&&v!==""&&!Array.isArray(v)&&String(v).length<160)out.push([key,String(v)])});return out}
 function telLinks(v){const m=String(v).match(PHONE_RE);if(!m)return esc(v);let p=m[0].replace(/\D/g,"");if(p.startsWith("212"))p="0"+p.slice(3);
   return `${esc(v)} <a class="wa" href="tel:${p}">📞 عيط</a> ${waLink(p)?`<a class="wa" href="${waLink(p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}`}
+/* COLIX "Réclamation" agent (name + phone), filled by "لصق من COLIX" */
+function agentCell(o){const g=o.cxAgent;if(!g||!g.p)return "";const p=phone(g.p);
+  return `<div class="ag" style="margin-top:4px;font-size:.75rem;line-height:1.5;white-space:normal"><span title="المكلفة بالريكلاماسيون ف COLIX">🎧 <b>${esc(g.name||"Réclamation")}</b></span><br><a class="wa" href="tel:${p}">📞 ${esc(p)}</a>${waLink(p)?` <a class="wa" href="${waLink(p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</div>`}
 function histDate(m){return String(m.date||m.created_at||m.datetime||m.time||m.updated_at||"").trim()}
 function trackPanel(o){
   if(!o||!o.t)return "";
@@ -921,7 +924,7 @@ function viewOrders(){
     <div class="actions">${outboxCandidates().length?`<button class="btn" id="addColis" style="background:var(--navy);color:var(--navy-ink)">Add colis (${outboxCandidates().length})</button>`:""}<button class="btn sec" id="pasteO">لصق من COLIX</button><button class="btn" id="newO">+ طلبية جديدة</button></div></div>
   ${O.sentRes?`<div class="card" style="border-color:var(--gold)"><div class="head"><h2>${O.sentRes.some(x=>!x.tracking)?"⚠️":"✅"} تصيفطو ${O.sentRes.filter(x=>x.tracking).length} كولي لـ COLIX</h2><button class="btn sec" id="sentX" style="padding:4px 10px">سد</button></div>
     <div class="list">${O.sentRes.map(x=>`<div class="li"><span><b>${esc(x.name)}</b> <small>${esc(x.ville)}</small></span><span class="num ${x.tracking?"pos":"neg"}" style="font-size:.8rem">${esc(x.tracking||x.status)}</span></div>`).join("")||'<p class="note">ما كاين حتى كولي جديد</p>'}</div></div>`:""}
-  ${O.paste?`<div class="card"><h2>لصق اللائحة ديال COLIX</h2><div class="sub">كوبي الكولي من COLIX (بحال اللي كتصيفط فالشات) ولصقهم هنا. الحالة ديال كل طلبية كتبدل حسب التراكينغ.</div>
+  ${O.paste?`<div class="card"><h2>لصق اللائحة ديال COLIX</h2><div class="sub">فـ COLIX حل <b>List Colis</b>، ختار <b>Afficher 100</b>، دير <b>Ctrl+A</b> ومن بعد <b>Ctrl+C</b>، ولصق هنا. الحالة والمكلفة بالريكلاماسيون (🎧 السمية والنمرة) ديال كل طلبية كيتبدلو حسب التراكينغ.</div>
     <textarea id="pasteTxt" class="inp" rows="8" style="direction:ltr;text-align:left;resize:vertical" placeholder="SBB10261521618HS&#10;Normal&#10;…&#10;شريط مطاطي 10 متر-(1)	Non Payé	Expédié"></textarea>
     <div class="actions"><button class="btn" id="pasteGo">بدل الحالات</button><button class="btn sec" id="pasteX">رجوع</button></div></div>`:""}
   ${ed?orderForm(ed):""}
@@ -941,7 +944,7 @@ function viewOrders(){
       <td>${esc(o.c||"")}${o.t||o.sent||o.imp||!fresh(o.d)?"":cityPill(o.c,`data-ofix="${o.id}"`)}</td><td><div class="pcell">${prodImg(o.pr)}<span>${esc(o.pr)}${(o.q||1)>1?` ×${o.q}`:""}</span></div></td><td class="r num">${nf.format(o.pz||0)}</td><td>${esc(o.a||"")}</td>
       <td>${o.t||o.sent?pillConf(o.cs):`<select class="mini" data-k="cs" data-id="${o.id}" aria-label="التأكيد">${opts(CONF.includes(o.cs)?CONF:[o.cs,...CONF],o.cs)}</select>`}</td>
       <td>${pillDeliv(o.ds)}</td>
-      <td class="num" style="font-size:.75rem">${o.t?esc(o.t):o.cxErr?`<span class="pill p-bad" title="${esc(o.cxErr)}">COLIX رفض</span>`:o.sent?'<span class="pill p-info">تصيفطات لـ COLIX</span>':(o.cs==="Confirmé"&&!o.imp&&fresh(o.d)?'<span class="pill p-warn">ما تصيفطاتش</span>':"")}</td></tr>`).join("")}
+      <td class="num" style="font-size:.75rem">${o.t?esc(o.t)+agentCell(o):o.cxErr?`<span class="pill p-bad" title="${esc(o.cxErr)}">COLIX رفض</span>`:o.sent?'<span class="pill p-info">تصيفطات لـ COLIX</span>':(o.cs==="Confirmé"&&!o.imp&&fresh(o.d)?'<span class="pill p-warn">ما تصيفطاتش</span>':"")}</td></tr>`).join("")}
     </tbody></table></div>
     <div class="pager"><button class="btn sec" id="pPrev" ${O.page?"":"disabled"}>السابق</button><span class="num">${O.page+1} / ${pages}</span><button class="btn sec" id="pNext" ${O.page<pages-1?"":"disabled"}>التالي</button></div>`
     :`<p class="empty">${curOrders().length?"ما كاين حتى طلبية بهاد الفلتر":"ما كاين حتى طلبية باقي. كليكي على \"+ طلبية جديدة\" باش تزيد الأولى."}</p>`}
