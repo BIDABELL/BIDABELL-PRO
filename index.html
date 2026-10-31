@@ -986,11 +986,14 @@ function bindOrderForm(){
     ORD[m]=(ORD[m]||[]).filter(x=>x.id!==old.id);O.edit=null;viewOrders();
     try{await writeOrders(m);toast("تمسحات الطلبية")}catch(e){toast(failMsg(e))}
   };
-  {const CMf=custMap();$("f_p").oninput=e=>{$("f_hist").innerHTML=custBadge(CMf,e.target.value,O.edit&&O.edit.id)}}
+  {const CMf=custMap(),fp=$("f_p");
+    /* +212 655-860985 / 00212... / 06 55 86 09 85 -> 0655860985 (COLIX format), as soon as the number is complete */
+    const fix=()=>{const k=phKeys(fp.value);if(k.length===1&&fp.value!=="0"+k[0])fp.value="0"+k[0]};
+    fp.oninput=()=>{fix();$("f_hist").innerHTML=custBadge(CMf,fp.value,O.edit&&O.edit.id)};fp.onblur=fix}
   $("oform").onsubmit=async e=>{
     e.preventDefault();
     const v=id=>$(id).value.trim(),n=x=>{const f=parseFloat(String(x).replace(",","."));return isFinite(f)?f:null};
-    const o={id:O.edit.id||uid("o"),d:v("f_d")||today(),a:v("f_a"),n:v("f_n"),p:v("f_p").replace(/\D/g,"").replace(/^0/,""),c:v("f_c"),ad:v("f_ad"),pr:v("f_pr"),pz:n(v("f_pz"))||0,q:Math.max(1,parseInt(v("f_q"))||1),cs:v("f_cs"),ds:v("f_ds"),t:v("f_t")};
+    const o={id:O.edit.id||uid("o"),d:v("f_d")||today(),a:v("f_a"),n:v("f_n"),p:(phKeys(v("f_p"))[0]||v("f_p").replace(/\D/g,"").replace(/^0/,"")),c:v("f_c"),ad:v("f_ad"),pr:v("f_pr"),pz:n(v("f_pz"))||0,q:Math.max(1,parseInt(v("f_q"))||1),cs:v("f_cs"),ds:v("f_ds"),t:v("f_t")};
     const f=n(v("f_f"));if(f!=null)o.f=f;
     for(const k of ["sk","rem","imp"])if(O.edit[k]!=null)o[k]=O.edit[k];
     if(o.t&&O.edit.sent)o.sent=O.edit.sent;
