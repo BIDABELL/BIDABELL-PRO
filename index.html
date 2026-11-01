@@ -167,6 +167,7 @@ button.li.on{background:var(--gold-soft)}
     <nav id="nav" hidden>
       <a href="#dashboard">لوحة القيادة</a>
       <a href="#youcan">YouCan</a>
+      <a href="#notes">ملاحظات</a>
       <a href="#orders">الطلبيات</a>
       <a href="#confirmers">المؤكدات</a>
       <a href="#stock">الستوك</a>
@@ -730,6 +731,52 @@ function viewRet(){
   document.querySelectorAll("[data-unrcv]").forEach(b=>b.onclick=()=>{const id=b.dataset.unrcv;if(UI.retArm!==id){UI.retArm=id;viewRet();return}UI.retArm=null;const o=allOrders().find(x=>x.id===id);if(!o)return;delete o.rcv;save(o,"ترجع لـ باقي ما وصلش")});
 }
 
+/* ================= notes / reminders (call Karim on Monday, relance a client...) ================= */
+const NOTE_TYPES=[["call","📞 عيط"],["relance","🔁 Relance"],["other","📝 أخرى"]];
+function notesDue(){return (ST.notes||[]).filter(n=>!n.done&&n.date<=today()).length}
+function updNotesBadge(){const a=document.querySelector('#nav a[href="#notes"]'),n=notesDue();if(a)a.textContent="ملاحظات"+(n?` (${n})`:"")}
+function noteRow(n){
+  const ph=(String(n.phone||"").match(/(?:\+?212|0)[5-7]\d{8}/)||[""])[0],p=ph?phone(ph):"",late=!n.done&&n.date<today(),t=NOTE_TYPES.find(x=>x[0]===n.type)||NOTE_TYPES[2];
+  return `<div class="li" style="${late?"background:var(--bad-soft);border-radius:8px;padding-inline:8px":""}">
+    <span style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" data-ndone="${esc(n.id)}" ${n.done?"checked":""} style="margin-top:4px;width:18px;height:18px" aria-label="سالات">
+      <span><b style="${n.done?"text-decoration:line-through;opacity:.6":""}">${esc(n.text)}</b><br>
+      <small><span class="num">${esc(n.date)}</span> · ${t[1]}${n.who?" · "+esc(n.who):""}${p?` · <span class="num">${esc(p)}</span> <a class="wa" href="tel:${p}">📞</a> ${waLink(p)?`<a class="wa" href="${waLink(p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}`:""}${late?' · <b style="color:var(--bad)">فاتت</b>':""}</small></span></span>
+    <button class="btn sec" data-ndel="${esc(n.id)}" style="padding:3px 9px">${UI.nArm===n.id?"متأكد؟":"مسح"}</button></div>`;
+}
+function viewNotes(){
+  const N=UI.notes||(UI.notes={type:"call"}),all=(ST.notes||[]).slice();
+  const due=all.filter(n=>!n.done&&n.date<=today()).sort((a,b)=>a.date.localeCompare(b.date));
+  const next=all.filter(n=>!n.done&&n.date>today()).sort((a,b)=>a.date.localeCompare(b.date));
+  const done=all.filter(n=>n.done).sort((a,b)=>String(b.doneAt||"").localeCompare(String(a.doneAt||""))).slice(0,30);
+  const pre=N.pre||{};
+  $("view").innerHTML=`
+  <div class="head"><div><h1>ملاحظات</h1><div class="sub">شكون خاصك تعيط ليه، شي Relance، ولا أي حاجة ما بغيتيش تنساها. اللي وصل النهار ديالها كتبان هنا لفوق.</div></div></div>
+  <form class="card" id="nF" autocomplete="off"><h2>ملاحظة جديدة</h2>
+    <div class="bar">${NOTE_TYPES.map(([k,l])=>`<button type="button" class="chip" data-nt="${k}" aria-pressed="${N.type===k}">${l}</button>`).join("")}</div>
+    <div class="form">
+      <label class="field wide">شنو خاصك دير<input id="nT" required placeholder="مثلا: عيط لكريم تطوان، بغا BAGIT 30M" value="${esc(pre.text||"")}"></label>
+      <label class="field">النهار<input id="nD" type="date" value="${esc(pre.date||shiftDays(today(),1))}"></label>
+      <label class="field">الكليان (اختياري)<input id="nW" placeholder="كريم · Tetouan" value="${esc(pre.who||"")}"></label>
+      <label class="field">التيليفون (اختياري)<input id="nP" inputmode="tel" class="num" value="${esc(pre.phone||"")}"></label>
+    </div>
+    <div class="bar">${[["اليوم",0],["غدا",1],["بعد غدا",2],["من دابا سيمانة",7]].map(([l,d])=>`<button type="button" class="chip" data-nd="${d}">${l}</button>`).join("")}</div>
+    <div class="actions"><button class="btn" type="submit">زيد</button></div></form>
+  <div class="card"><h2>اليوم وفاتو <span class="num sub">(${due.length})</span></h2>${due.length?`<div class="list">${due.map(noteRow).join("")}</div>`:'<p class="empty">ما كاين والو اليوم 👍</p>'}</div>
+  ${next.length?`<div class="card"><h2>جايين <span class="num sub">(${next.length})</span></h2><div class="list">${next.map(noteRow).join("")}</div></div>`:""}
+  ${done.length?`<div class="card"><h2>ساليين</h2><div class="list">${done.map(noteRow).join("")}</div></div>`:""}`;
+  N.pre=null;
+  document.querySelectorAll("[data-nt]").forEach(b=>b.onclick=()=>{N.type=b.dataset.nt;document.querySelectorAll("[data-nt]").forEach(x=>x.setAttribute("aria-pressed",x.dataset.nt===N.type))});
+  document.querySelectorAll("[data-nd]").forEach(b=>b.onclick=()=>{$("nD").value=shiftDays(today(),+b.dataset.nd)});
+  $("nF").onsubmit=async e=>{e.preventDefault();const text=$("nT").value.trim().slice(0,200);if(!text){toast("كتب شنو خاصك دير");return}
+    ST.notes=[...(ST.notes||[]),{id:uid("n"),text,date:$("nD").value||today(),type:N.type,who:$("nW").value.trim().slice(0,60),phone:$("nP").value.trim().slice(0,20),created:Date.now()}];
+    viewNotes();updNotesBadge();try{await writeSettings();toast("تزادت الملاحظة")}catch(err){toast(failMsg(err))}};
+  document.querySelectorAll("[data-ndone]").forEach(c=>c.onchange=async()=>{ST.notes=(ST.notes||[]).map(n=>n.id===c.dataset.ndone?{...n,done:c.checked,doneAt:c.checked?today():""}:n);
+    viewNotes();updNotesBadge();try{await writeSettings()}catch(err){toast(failMsg(err))}});
+  document.querySelectorAll("[data-ndel]").forEach(b=>b.onclick=async()=>{const id=b.dataset.ndel;if(UI.nArm!==id){UI.nArm=id;viewNotes();return}UI.nArm=null;
+    ST.notes=(ST.notes||[]).filter(n=>n.id!==id);viewNotes();updNotesBadge();try{await writeSettings();toast("تمسحات")}catch(err){toast(failMsg(err))}});
+}
+function noteFromOrder(o){UI.notes=UI.notes||{type:"call"};UI.notes.pre={who:[o.n,o.c].filter(Boolean).join(" · "),phone:phone(o.p),date:shiftDays(today(),1),text:""};location.hash="#notes"}
+
 /* ================= import from the old page (one time) ================= */
 let IMP_MSG="";
 async function importOld(file){
@@ -760,12 +807,13 @@ async function importOld(file){
 
 
 /* ================= router ================= */
-const VIEWS={returns:viewRet,youcan:viewYC,dashboard:viewDash,orders:viewOrders,confirmers:viewConf,stock:viewStock,expenses:viewExp,settings:viewSettings};
+const VIEWS={notes:viewNotes,returns:viewRet,youcan:viewYC,dashboard:viewDash,orders:viewOrders,confirmers:viewConf,stock:viewStock,expenses:viewExp,settings:viewSettings};
 function route(){
   if(!SB||!PROFILE)return;if(!ISOWNER){if(CV.doc)viewConfirmer();return}
   const k=(location.hash||"#dashboard").slice(1);const v=VIEWS[k]?k:"dashboard";
   document.querySelectorAll("#nav a").forEach(a=>a.setAttribute("aria-current",a.getAttribute("href")==="#"+v?"page":"false"));
   if(!(ready.o&&ready.e&&ready.s)){$("view").innerHTML='<p class="empty">كيتحمل…</p>';return}
+  updNotesBadge();
   VIEWS[v]();
 }
 addEventListener("hashchange",()=>{window.scrollTo(0,0);route()});
@@ -1001,7 +1049,7 @@ function orderForm(o){
     <label class="field"><span id="f_fl">ثمن التوصيل (DH)${cityFee(o.c)!=null?" · أوتوماتيك":""}</span><input id="f_f" inputmode="decimal" placeholder="${cityFee(o.c)??ST.delivFee}" value="${o.f??""}"></label>
   </div>
   <div class="actions"><button class="btn" type="submit">${o.id?"سجل التعديل":"زيد الطلبية"}</button><button class="btn sec" type="button" id="fCancel">رجوع</button>
-  ${o.id?`<button class="btn danger" type="button" id="fDel">مسح الطلبية</button>`:""}</div></form>${o.t?trackPanel(allOrders().find(x=>x.id===o.id)||o):""}`;
+  ${o.id?`<button class="btn sec" type="button" id="fNote">📝 زيد ملاحظة</button><button class="btn danger" type="button" id="fDel">مسح الطلبية</button>`:""}</div></form>${o.t?trackPanel(allOrders().find(x=>x.id===o.id)||o):""}`;
 }
 function bindOrderForm(){
   const O=UI.ord;
@@ -1013,6 +1061,7 @@ function bindOrderForm(){
   }
   $("f_pr").onchange=e=>{const p=prodOf(e.target.value);if(p.price)$("f_pz").value=p.price*(+$("f_q").value||1)};
   $("fCancel").onclick=()=>{O.edit=null;viewOrders()};
+  if($("fNote"))$("fNote").onclick=()=>{const o=O.edit;O.edit=null;noteFromOrder(o)};
   {const chk=()=>{const v=$("f_c").value;$("f_cchk").innerHTML=v.trim()?cityPill(v,'data-ffix="1"'):"";const b=$("f_cchk").querySelector("[data-ffix]");if(b)b.onclick=()=>{$("f_c").value=b.dataset.city;$("f_c").dispatchEvent(new Event("input"))}};
    $("f_c").addEventListener("input",chk);chk()}
   $("f_c").addEventListener("input",()=>{const f=cityFee($("f_c").value);$("f_f").placeholder=f??ST.delivFee;$("f_fl").textContent="ثمن التوصيل (DH)"+(f!=null?" · أوتوماتيك":Object.keys(CITY).length&&$("f_c").value.trim()?" · المدينة ما كايناش فاللائحة":"")});
