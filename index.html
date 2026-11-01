@@ -108,6 +108,9 @@ td select.mini:hover{border-color:var(--line)}
 .pimg{width:42px;height:42px;object-fit:cover;border-radius:8px;background:var(--sunken);flex:none}
 .pcell{display:flex;align-items:center;gap:8px}
 .pimg.ph{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.1rem}
+#callDlg{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;padding:16px}#callDlg[hidden]{display:none}#callDlg .card{width:100%;max-width:520px;margin:0}
+.cbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.cbar .cb{font-size:.75rem;padding:3px 9px;border-radius:999px;border:1px solid var(--line,#ccd);text-decoration:none;color:inherit;white-space:nowrap}
+.clog{display:block;margin-top:3px;font-size:.72rem;color:var(--muted);cursor:help}
 .who .hist{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;cursor:help}
 a.wa{color:var(--good);text-decoration:none;font-weight:600;font-size:.78rem}
 
@@ -418,6 +421,7 @@ async function loadAll(){
   const S={};(ss.data||[]).forEach(r=>S[r.key]=r.data||{});
   ST=Object.assign(clone(DEFAULTS),S.app||{});CITY=(S.cities&&S.cities.map)||{};
   ready={o:true,e:true,s:true};
+  loadCalls().then(()=>refresh());
   loadYC();
 }
 let RT=null;
@@ -577,6 +581,7 @@ function bindConfAccess(){
 let CV={doc:null,filter:"call",local:{}},CRT=null;
 async function loadConfirmer(){
   const me=PROFILE.confirmer;
+  await loadCalls();
   const [pub,rows]=await Promise.all([SB.from("conf_pub").select("data").eq("confirmer",me).maybeSingle(),pageAll("orders","id,data")]);
   const d=(pub.data&&pub.data.data)||{name:me,fee:0,paid:0,pays:[],acct:null,start:""};
   const st=d.start||"";const fr=x=>!st||x>=st;
@@ -618,13 +623,13 @@ function viewConfirmer(){
   ${(()=>{const op=CV.open&&L.find(x=>x.id===CV.open);return op?`<div id="trkBox"><div class="head" style="margin-bottom:6px"><b>${esc(op.n)} · ${esc(op.c||"")}</b><button class="btn sec" type="button" id="trkX" style="padding:4px 10px">سد</button></div>${trackPanel(op)}</div>`:""})()}
   <div class="card" style="padding:12px"><div class="bar">${Object.keys(labels).map(k=>`<button class="chip" data-cf="${k}" aria-pressed="${CV.filter===k}">${labels[k]} <span class="num">(${L.filter(F[k]).length})</span></button>`).join("")}</div></div>
   <div class="card" style="padding:8px 12px">${list.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th class="r">الثمن</th><th>التأكيد</th><th>ملاحظة</th><th>التوصيل</th><th>Tracking</th></tr></thead><tbody>
-  ${list.map(o=>`<tr class="${rowCls(o)} ${o.t?"click":""}" data-co="${esc(o.id)}"><td class="num">${esc(o.d.slice(5))}</td><td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small></div></td><td>${esc(o.c||"")}</td><td>${esc(o.pr)}${(o.q||1)>1?" ×"+o.q:""}</td><td class="r num">${nf.format(o.pz||0)}</td>
+  ${list.map(o=>`<tr class="${rowCls(o)} ${o.t?"click":""}" data-co="${esc(o.id)}"><td class="num">${esc(o.d.slice(5))}</td><td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))}</small>${contactBar(o)}</div></td><td>${esc(o.c||"")}${o.ad?`<div class="note">${esc(o.ad)}</div>`:""}</td><td>${esc(o.pr)}${(o.q||1)>1?" ×"+o.q:""}</td><td class="r num">${nf.format(o.pz||0)}</td>
     <td>${locked(o)?pillConf(o.cs):`<select class="mini" data-ccs="${esc(o.id)}" aria-label="التأكيد">${opts(CONF.includes(o.cs)?CONF:[o.cs,...CONF],o.cs)}</select>`}</td>
     <td>${locked(o)?esc(o.rem||""):`<input class="inp" data-crem="${esc(o.id)}" value="${esc(o.rem||"")}" placeholder="…" style="min-width:120px;padding:4px 8px" aria-label="ملاحظة">`}</td>
     <td>${pillDeliv(o.ds)}${stuckPill(o)}</td><td class="num" style="font-size:.75rem">${o.t?`${esc(o.t)} <span style="color:var(--info)">${CV.open===o.id?"▲":"▼ تفاصيل"}</span>${agentCell(o)}`:""}</td></tr>`).join("")}
   </tbody></table></div><p class="note">كليكي على شي طلبية فيها Tracking باش تشوفي المراحل ديالها والنمرة ديال الليفرور.</p>`:`<p class="empty">ما كاين حتى طلبية ف "${labels[CV.filter]}"</p>`}</div>`;
   document.querySelectorAll("[data-cf]").forEach(b=>b.onclick=()=>{CV.filter=b.dataset.cf;viewConfirmer()});
-  bindProofLinks();bindTrack();
+  bindProofLinks();bindTrack();bindContacts(id=>L.find(x=>x.id===id));
   document.querySelectorAll("tr.click[data-co]").forEach(tr=>tr.onclick=e=>{if(e.target.closest("select,input,a,button"))return;CV.open=CV.open===tr.dataset.co?null:tr.dataset.co;viewConfirmer();if(CV.open&&$("trkBox"))$("trkBox").scrollIntoView({behavior:"smooth",block:"start"})});
   if($("trkX"))$("trkX").onclick=()=>{CV.open=null;viewConfirmer()};
   const send=async(id,patch)=>{CV.local[id]={...(CV.local[id]||{}),...patch};
@@ -634,6 +639,58 @@ function viewConfirmer(){
   document.querySelectorAll("[data-crem]").forEach(i=>i.onchange=()=>send(i.dataset.crem,{rem:i.value.trim()}));
 }
 
+/* ================= calls & messages to clients (logged in the "calls" table) ================= */
+let CALLS=[],CALLS_WARN=false,PENDING_CALL=null;
+async function loadCalls(){try{const since=new Date(Date.now()-120*864e5).toISOString();
+  const {data,error}=await SB.from("calls").select("*").gte("at",since).order("at",{ascending:false}).limit(10000);
+  if(!error)CALLS=data||[]}catch(e){}}
+function myName(){return ISOWNER?"LAHOUCINE":String((PROFILE&&PROFILE.confirmer)||"")}
+function niceName(n){n=String(n||"");return n?n[0].toUpperCase()+n.slice(1).toLowerCase():""}
+function mmss(s){s=Math.max(0,Math.round(+s||0));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")}
+async function logContact(row){
+  const r={order_id:row.order_id,confirmer:row.confirmer||myName(),kind:row.kind,secs:row.secs==null?null:Math.round(row.secs),outcome:row.outcome||null,note:row.note||null,phone:row.phone||null};
+  const tmp={...r,id:"tmp"+Date.now(),at:new Date().toISOString()};CALLS.unshift(tmp);
+  try{const {data,error}=await SB.from("calls").insert(r).select().single();if(error)throw error;Object.assign(tmp,data)}
+  catch(e){if(!CALLS_WARN){CALLS_WARN=true;toast("ما تسجلاتش (خاص جدول calls ف Supabase)")}}
+  return tmp}
+function msgText(o){const first=String(o.n||"").trim().split(/\s+/)[0]||"";
+  return `السلام عليكم ${first}، معاك ${niceName(o.a&&o.a!=="LAHOUCINE"?o.a:myName())||"BIDABELL"} من BIDABELL 🙏 بخصوص الطلبية ديالك: ${o.pr||""}${(o.q||1)>1?" ×"+o.q:""} بـ ${nf.format(o.pz||0)} درهم${o.c?" ("+o.c+")":""}. واش نأكدو معاك باش نصيفطوها ليك؟`}
+function contactSummary(id){const L=CALLS.filter(c=>c.order_id===id);if(!L.length)return "";
+  const cl=L.filter(c=>c.kind==="call"),ans=cl.filter(c=>c.outcome==="جاوب").length,secs=cl.reduce((a,c)=>a+(+c.secs||0),0),
+    wa=L.filter(c=>c.kind==="wa").length,sm=L.filter(c=>c.kind==="sms").length,last=L.map(c=>c.at).sort().pop();
+  const tip=L.slice(0,12).map(c=>`${new Date(c.at).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"})} · ${c.confirmer} · ${c.kind==="call"?"📞 "+(c.outcome||"?")+(c.secs!=null?" "+mmss(c.secs):""):c.kind==="wa"?"💬 WhatsApp":"✉️ SMS"}`).join("\n");
+  return `<small class="clog" title="${esc(tip)}">${cl.length?`📞 ${cl.length}${ans?` (${ans} جاوب)`:""} · ⏱ ${mmss(secs)}`:""}${wa?` · 💬 ${wa}`:""}${sm?` · ✉️ ${sm}`:""} · آخر ${new Date(last).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</small>`}
+function contactBar(o){const p=phone(o.p);if(p.length<9)return "";const t=encodeURIComponent(msgText(o)),w=waLink(p);
+  return `<span class="cbar"><a class="cb" href="tel:${p}" data-call="${esc(o.id)}">📞 عيط</a>${w?`<a class="cb wa" href="${w}?text=${t}" target="_blank" rel="noopener" data-msg="wa" data-mid="${esc(o.id)}">WhatsApp</a>`:""}<a class="cb" href="sms:${p}?&body=${t}" data-msg="sms" data-mid="${esc(o.id)}">SMS</a></span>${contactSummary(o.id)}`}
+function rerenderAfterContact(){if(ISOWNER)route();else viewConfirmer()}
+function bindContacts(find){
+  document.querySelectorAll("[data-call]").forEach(a=>a.onclick=e=>{e.stopPropagation();const o=find(a.dataset.call);if(!o)return;
+    PENDING_CALL={o,t0:Date.now(),hid:0,shown:false};
+    setTimeout(()=>{if(PENDING_CALL&&!PENDING_CALL.hid&&!PENDING_CALL.shown)callDialog(null)},5000)});
+  document.querySelectorAll("[data-msg]").forEach(a=>a.onclick=e=>{e.stopPropagation();const o=find(a.dataset.mid);if(!o)return;
+    logContact({order_id:o.id,confirmer:o.a&&!ISOWNER?o.a:myName(),kind:a.dataset.msg,note:msgText(o),phone:phone(o.p)}).then(rerenderAfterContact)})}
+document.addEventListener("visibilitychange",()=>{const P=PENDING_CALL;if(!P||P.shown)return;
+  if(document.visibilityState==="hidden"){P.hid=Date.now()}else if(P.hid){callDialog((Date.now()-P.hid)/1000)}});
+function callDialog(secs){const P=PENDING_CALL;if(!P||P.shown)return;P.shown=true;const o=P.o;
+  let box=$("callDlg");if(!box){box=document.createElement("div");box.id="callDlg";document.body.appendChild(box)}
+  const outs=[["جاوب","✅"],["ما جاوبش","📵"],["مشغول","⛔"],["مطفي","📴"],["نمرة غالطة","❌"]];
+  box.innerHTML=`<div class="card" role="dialog" aria-label="شنو وقع فالعيطة"><h2 style="margin:0 0 4px">📞 ${esc(o.n)} <small class="num" style="font-weight:400">${esc(phone(o.p))}</small></h2>
+    <label class="field">مدة العيطة (دقايق:ثواني)<input id="cdSecs" class="inp num" value="${secs==null?"":mmss(secs)}" placeholder="مثلا 1:30" inputmode="numeric" style="max-width:140px"></label>
+    <div class="sub" style="margin:6px 0">شنو وقع؟</div>
+    <div class="bar">${outs.map(([k,i])=>`<button class="btn sec" type="button" data-out="${esc(k)}">${i} ${esc(k)}</button>`).join("")}</div>
+    <div class="actions" style="margin-top:8px"><button class="btn sec" type="button" id="cdX">ما تعيطش، سد</button></div></div>`;
+  box.hidden=false;
+  const close=()=>{box.hidden=true;PENDING_CALL=null};
+  $("cdX").onclick=close;
+  box.querySelectorAll("[data-out]").forEach(b=>b.onclick=async()=>{const v=$("cdSecs").value.trim();let sec=null;
+    if(v){const m=v.match(/^(\d+)(?::(\d{1,2}))?$/);if(m)sec=m[2]!=null?(+m[1])*60+(+m[2]):+m[1]}
+    close();await logContact({order_id:o.id,confirmer:o.a&&!ISOWNER?o.a:myName(),kind:"call",secs:sec,outcome:b.dataset.out,phone:phone(o.p)});
+    toast("✅ تسجلات العيطة");rerenderAfterContact()})}
+/* per confirmer: calls, answered, minutes, messages, in a date range */
+function callStats(from,to){const inR=c=>{const d=c.at.slice(0,10);return (!from||d>=from)&&(!to||d<=to)};
+  const by={};CALLS.filter(inR).forEach(c=>{const k=c.confirmer||"?";const r=by[k]||(by[k]={n:0,ans:0,secs:0,wa:0,sms:0,ords:new Set()});
+    r.ords.add(c.order_id);if(c.kind==="call"){r.n++;if(c.outcome==="جاوب")r.ans++;r.secs+=+c.secs||0}else if(c.kind==="wa")r.wa++;else r.sms++});
+  return by}
 /* ================= COLIX details of one parcel (history, delivery man, phones) ================= */
 const PHONE_RE=/(?:\+?212|0)\s?[5-7](?:[\s.-]?\d){8}/;
 function cxLabel(k){k=String(k).toLowerCase();
@@ -1095,7 +1152,7 @@ function viewOrders(){
   <div class="card" style="padding:8px 12px">
     ${pageRows.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th class="r">الثمن</th><th>المؤكدة</th><th>التأكيد</th><th>التوصيل</th><th>Tracking</th></tr></thead><tbody>
     ${pageRows.map(o=>`<tr class="click ${rowCls(o)}" data-id="${o.id}"><td class="num">${esc(o.d.slice(5))}</td>
-      <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small>${custBadge(CM,o.p,o.id)}</div></td>
+      <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))}</small>${custBadge(CM,o.p,o.id)}${contactBar(o)}</div></td>
       <td>${esc(o.c||"")}${o.t||o.sent||o.imp||!fresh(o.d)?"":cityPill(o.c,`data-ofix="${o.id}"`)}</td><td><div class="pcell">${prodImg(o.pr)}<span>${esc(o.pr)}${(o.q||1)>1?` ×${o.q}`:""}</span></div></td><td class="r num">${nf.format(o.pz||0)}</td><td>${esc(o.a||"")}</td>
       <td>${o.t||o.sent?pillConf(o.cs):`<select class="mini" data-k="cs" data-id="${o.id}" aria-label="التأكيد">${opts(CONF.includes(o.cs)?CONF:[o.cs,...CONF],o.cs)}</select>`}</td>
       <td>${pillDeliv(o.ds)}${stuckPill(o)}</td>
@@ -1136,6 +1193,7 @@ function viewOrders(){
     const o=allOrders().find(x=>x.id===s.dataset.id);if(!o)return;o[s.dataset.k]=s.value;if(!o.ds)delete o.ds;if(o.ds==="Livré"&&!o.ld)o.ld=today();if(o.ds!=="Livré")delete o.ld;
     try{await writeOrders(o.d.slice(0,7));toast("تبدلات الحالة")}catch(e){toast(failMsg(e))}
   });
+  bindContacts(id=>allOrders().find(x=>x.id===id));
   if(ed){bindOrderForm();bindTrack()}
 }
 function orderForm(o){
@@ -1264,6 +1322,9 @@ function viewConf(){
   <td>${due>0?`<button class="btn sec" data-pay="${esc(c.name)}" data-due="${due}" style="padding:5px 10px">خلص</button>`:""}</td></tr>`).join("")}
   </tbody></table></div></div>
   <div id="payBox"></div>
+  ${(()=>{const S=callStats(C.from,C.to),ks=Object.keys(S).sort();return `<div class="card"><h2>📞 العيطات والميساجات</h2><div class="sub">العيطات اللي دارو من BIDABELL Pro${C.from||C.to?" فهاد الفترة":""}. المدة تقريبية (الوقت اللي خرجو فيه من الصفحة باش يعيطو).</div>
+  ${ks.length?`<div class="tw"><table><thead><tr><th>المؤكدة</th><th class="r">عيطات</th><th class="r">جاوبو</th><th class="r">الوقت فالتيليفون</th><th class="r">المعدل</th><th class="r">WhatsApp</th><th class="r">SMS</th><th class="r">طلبيات</th></tr></thead><tbody>
+  ${ks.map(k=>{const r=S[k];return `<tr><td><b>${esc(k)}</b></td><td class="r num">${r.n}</td><td class="r num">${r.ans} <small>(${pct(r.ans,r.n)})</small></td><td class="r num">${mmss(r.secs)}</td><td class="r num">${r.n?mmss(r.secs/r.n):"—"}</td><td class="r num">${r.wa}</td><td class="r num">${r.sms}</td><td class="r num">${r.ords.size}</td></tr>`}).join("")}</tbody></table></div>`:'<p class="empty">باقي ما تسجلات حتى عيطة. ملي المؤكدات يعيطو بالزر 📞 من BIDABELL Pro، كيبانو هنا.</p>'}</div>`})()}
   <div class="card"><h2>الحساب الكامل ديال كل مؤكدة</h2><div class="sub">القديم = قبل ${esc(ST.start||"")} (الطلبيات ديال OptiCommerce)، والجديد = من ${esc(ST.start||"")}. الخلاص كيتنقص من القديم الأول.</div>
   <div class="tw"><table><thead><tr><th>المؤكدة</th><th class="r">توصلات قديم</th><th class="r">ربحات قديم</th><th class="r">توصلات جديد</th><th class="r">ربحات جديد</th><th class="r">تخلصات</th><th class="r">باقي قديم</th><th class="r">باقي جديد</th><th class="r">المجموع</th></tr></thead><tbody>
   ${rows.filter(x=>x.A.fee).map(({c,A})=>`<tr><td><b>${esc(c.name)}</b></td><td class="r num">${A.oldN}</td><td class="r num">${dh(A.eOld)}</td><td class="r num">${A.newN}</td><td class="r num">${dh(A.eNew)}</td><td class="r num">${dh(A.paid)}</td><td class="r num">${dh(A.dueOld)}</td><td class="r num">${dh(A.dueNew)}</td><td class="r"><b class="num">${dh(A.due)}</b></td></tr>`).join("")}
