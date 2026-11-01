@@ -156,6 +156,14 @@ nav a .bd{font-style:normal;background:#E5383B;color:#fff;border-radius:999px;fo
 .top .inner{display:flex;align-items:center;gap:10px;padding-block:10px;max-width:1180px}
 .iconbtn{padding:6px 11px!important;font-size:1rem}
 #menuBtn,.top-logo,.side-dim{display:none}
+.gsearch{position:relative;flex:1;max-width:520px}
+.gsearch input{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:9px 38px 9px 14px;color:var(--ink);font-size:.9rem}
+.gsearch .g-ico{position:absolute;right:13px;top:50%;transform:translateY(-50%);font-size:.9rem;opacity:.6;pointer-events:none}
+.g-res{position:absolute;top:calc(100% + 6px);inset-inline:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.18);max-height:70vh;overflow:auto;z-index:40;padding:6px}
+.g-row{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:start;background:none;border:0;border-radius:10px;padding:8px 10px;color:inherit;font:inherit}
+.g-row:hover{background:var(--sunken)} .g-row small{color:var(--muted)}
+.g-row.row-del{background:color-mix(in srgb,var(--good) 10%,transparent)} .g-row.row-ret{background:color-mix(in srgb,var(--bad) 10%,transparent)}
+.g-cli{background:var(--sunken);border-radius:10px;padding:8px 12px;margin-bottom:6px}
 .top-logo{height:30px;width:auto;background:var(--side);border-radius:8px;padding:3px 8px}
 .sync{font-size:.78rem;color:var(--muted);white-space:nowrap}
 @media (max-width:900px){
@@ -168,6 +176,8 @@ nav a .bd{font-style:normal;background:#E5383B;color:#fff;border-radius:999px;fo
   #syncBtn{font-size:0!important;padding:6px 10px!important}
   #syncBtn::before{content:"🔄";font-size:1rem}
   .sync{display:none}
+  .top .inner{flex-wrap:wrap}
+  .gsearch{order:10;flex:0 0 100%;max-width:none}
   main{padding-block:12px 40px}
   h1{font-size:1.2rem}
   .kpi .v{font-size:1.15rem}
@@ -197,6 +207,7 @@ nav a .bd{font-style:normal;background:#E5383B;color:#fff;border-radius:999px;fo
   <div class="inner">
     <button class="btn sec iconbtn" id="menuBtn" type="button" aria-label="القائمة">☰</button>
     <img class="top-logo" src="logo-dark.png" alt="BIDABELL">
+    <div class="gsearch" id="gWrap" hidden><span class="g-ico">🔍</span><input id="gq" type="search" placeholder="قلب على طلبية ولا كليان: سمية، تيليفون، تراكينغ، مدينة…" autocomplete="off"><div class="g-res" id="gRes" hidden></div></div>
     <span class="sync" id="sync">كيتحمل…</span>
     <span style="flex:1"></span>
     <button class="btn" id="syncBtn" style="padding:6px 12px;font-size:.85rem" hidden>تحديث الحالات</button>
@@ -469,7 +480,7 @@ async function afterLogin(user){
   if(!p||p.role==="pending"||(p.role==="confirmer"&&!p.confirmer)){document.querySelector("#nav").hidden=true;
     $("view").innerHTML='<div class="card"><h2>مرحبا 👋</h2><p class="sub">الحساب ديالك باقي ما عندوش الحق يدخل. قول لـ Lahoucine يعطيك الدخول.</p></div>';return}
   if(p.role==="confirmer"){ISOWNER=false;startConfirmerMode();return}
-  ISOWNER=true;document.querySelector("#nav").hidden=false;
+  ISOWNER=true;document.querySelector("#nav").hidden=false;$("gWrap").hidden=false;bindGSearch();
   try{await loadAll()}catch(e){$("view").innerHTML=`<p class="empty">ما قدرتش نجيب الداتا (${esc(e.message||e)}). عاود حل الصفحة.</p>`;return}
   subscribe();
   const b=$("syncBtn");b.hidden=false;b.onclick=()=>trackNow(true);
@@ -801,6 +812,33 @@ function viewNotes(){
     ST.notes=(ST.notes||[]).filter(n=>n.id!==id);viewNotes();updNotesBadge();try{await writeSettings();toast("تمسحات")}catch(err){toast(failMsg(err))}});
 }
 function noteFromOrder(o){UI.notes=UI.notes||{type:"call"};UI.notes.pre={who:[o.n,o.c].filter(Boolean).join(" · "),phone:phone(o.p),date:shiftDays(today(),1),text:""};location.hash="#notes"}
+
+/* ================= global search (any order or client, old ones too) ================= */
+function gSearch(q){
+  q=q.trim().toLowerCase();if(q.length<2)return [];
+  const digits=q.replace(/\D/g,""),dq=digits.length>=4?digits.replace(/^212/,"").replace(/^0/,""):"";
+  return allOrders().filter(o=>{
+    if(dq&&String(o.p||"").replace(/\D/g,"").replace(/^212/,"").replace(/^0/,"").includes(dq))return true;
+    return [o.n,o.t,o.c,o.ad,o.pr,o.a].some(x=>String(x||"").toLowerCase().includes(q))}).sort((a,b)=>b.d.localeCompare(a.d));
+}
+function gRender(){
+  const box=$("gRes"),q=$("gq").value;if(!box)return;
+  const res=gSearch(q);if(q.trim().length<2){box.hidden=true;return}
+  const phones=[...new Set(res.map(o=>phone(o.p)).filter(Boolean))];
+  let head="";
+  if(res.length&&phones.length===1){const s=stats(res,[]);head=`<div class="g-cli"><b>${esc(res[0].n)}</b> · <span class="num">${esc(phones[0])}</span> ${waLink(phones[0])?`<a class="wa" href="${waLink(phones[0])}" target="_blank" rel="noopener">WhatsApp</a>`:""}<br><small>${res.length} طلبية · ${s.del} توصلات · ${s.ret} رجعات${s.rev?" · "+dh(s.rev):""}</small></div>`}
+  box.innerHTML=res.length?head+res.slice(0,15).map(o=>`<button class="g-row ${rowCls(o)}" data-gopen="${esc(o.id)}"><span><b>${esc(o.n)}</b> <small class="num">${esc(phone(o.p))}</small><br><small>${esc(o.c||"")} · ${esc(o.pr)}${(o.q||1)>1?" ×"+o.q:""} · <span class="num">${esc(o.d)}</span>${o.t?` · <span class="num">${esc(o.t)}</span>`:""}</small></span><span>${pillDeliv(o.ds)}</span></button>`).join("")+(res.length>15?`<p class="note" style="padding:6px 10px">+${res.length-15} أخرين، زيد كتب باش يقلّو</p>`:""):'<p class="empty" style="padding:14px">ما لقيت والو</p>';
+  box.hidden=false;
+  box.querySelectorAll("[data-gopen]").forEach(b=>b.onclick=()=>{const o=allOrders().find(x=>x.id===b.dataset.gopen);if(!o)return;
+    box.hidden=true;$("gq").value="";UI.ord.edit=clone(o);UI.ord.armed=false;if(!freshO(o))UI.archive=true;
+    if(location.hash==="#orders")viewOrders();else location.hash="#orders";window.scrollTo(0,0)});
+}
+function bindGSearch(){const i=$("gq");if(!i)return;
+  i.oninput=()=>{clearTimeout(gRender.t);gRender.t=setTimeout(gRender,150)};
+  i.onfocus=()=>{if(i.value.trim().length>1)gRender()};
+  i.onkeydown=e=>{if(e.key==="Escape"){i.value="";$("gRes").hidden=true;i.blur()}};
+  document.addEventListener("click",e=>{if(!e.target.closest(".gsearch"))$("gRes").hidden=true});
+}
 
 /* ================= import from the old page (one time) ================= */
 let IMP_MSG="";
