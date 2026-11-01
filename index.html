@@ -621,7 +621,7 @@ function viewConfirmer(){
   ${list.map(o=>`<tr class="${rowCls(o)} ${o.t?"click":""}" data-co="${esc(o.id)}"><td class="num">${esc(o.d.slice(5))}</td><td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small></div></td><td>${esc(o.c||"")}</td><td>${esc(o.pr)}${(o.q||1)>1?" ×"+o.q:""}</td><td class="r num">${nf.format(o.pz||0)}</td>
     <td>${locked(o)?pillConf(o.cs):`<select class="mini" data-ccs="${esc(o.id)}" aria-label="التأكيد">${opts(CONF.includes(o.cs)?CONF:[o.cs,...CONF],o.cs)}</select>`}</td>
     <td>${locked(o)?esc(o.rem||""):`<input class="inp" data-crem="${esc(o.id)}" value="${esc(o.rem||"")}" placeholder="…" style="min-width:120px;padding:4px 8px" aria-label="ملاحظة">`}</td>
-    <td>${pillDeliv(o.ds)}</td><td class="num" style="font-size:.75rem">${o.t?`${esc(o.t)} <span style="color:var(--info)">${CV.open===o.id?"▲":"▼ تفاصيل"}</span>${agentCell(o)}`:""}</td></tr>`).join("")}
+    <td>${pillDeliv(o.ds)}${stuckPill(o)}</td><td class="num" style="font-size:.75rem">${o.t?`${esc(o.t)} <span style="color:var(--info)">${CV.open===o.id?"▲":"▼ تفاصيل"}</span>${agentCell(o)}`:""}</td></tr>`).join("")}
   </tbody></table></div><p class="note">كليكي على شي طلبية فيها Tracking باش تشوفي المراحل ديالها والنمرة ديال الليفرور.</p>`:`<p class="empty">ما كاين حتى طلبية ف "${labels[CV.filter]}"</p>`}</div>`;
   document.querySelectorAll("[data-cf]").forEach(b=>b.onclick=()=>{CV.filter=b.dataset.cf;viewConfirmer()});
   bindProofLinks();bindTrack();
@@ -970,6 +970,7 @@ function viewDash(){
 
   $("view").innerHTML=`
   <div class="head"><div><h1>لوحة القيادة</h1><div class="sub">${D.preset==="all"?(UI.archive||!ST.start?"من البداية حتى اليوم":"من النهار اللي بديتي فيه من جديد ("+ST.start+") حتى اليوم"):`من <span class="num">${D.from}</span> حتى <span class="num">${D.to}</span>`}</div></div></div>
+  ${(()=>{const L=stuckList();return L.length?`<div class="card" style="border-color:var(--bad);padding:12px"><div class="head" style="margin:0"><div><h2 style="margin:0">⏳ ${L.length} كولي ما خرجاتش من COLIX</h2><div class="sub">تصيفطو ولكن باقي «${esc([...new Set(L.map(o=>o.ds||"Nouveau Colis"))].join(" / "))}» من كثر من نهار. غالباً ما كاينش الستوك عندهم: ${esc([...new Set(L.map(o=>o.pr))].join("، "))}</div></div><button class="btn" type="button" id="goStuck">شوفهم</button></div></div>`:""})()}
   <div class="card" style="padding:12px">
     <div class="bar">
       ${presets.map(([k,l])=>`<button class="chip" data-p="${k}" aria-pressed="${D.preset===k}">${l}</button>`).join("")}
@@ -1014,6 +1015,7 @@ function viewDash(){
   </div>
   <div id="drillBox">${drillPanel(ords)}</div>`;
   document.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{setPreset(b.dataset.p);viewDash()});
+  if($("goStuck"))$("goStuck").onclick=()=>{Object.assign(UI.ord,{ds:"stuck",m:"",cs:"",a:"",pr:"",q:"",page:0});location.hash="#orders"};
   $("dFrom").onchange=e=>{if(e.target.value){D.from=e.target.value;if(D.preset==="all")D.to=today();D.preset="";viewDash()}};
   $("dTo").onchange=e=>{if(e.target.value){D.to=e.target.value;if(D.preset==="all")D.from=monthStart();D.preset="";viewDash()}};
   $("dProd").onchange=e=>{D.prod=e.target.value;viewDash()};
@@ -1066,7 +1068,7 @@ function viewOrders(){
   let list=curOrders();
   const months=[...new Set(list.map(o=>o.d.slice(0,7)))].sort().reverse();
   list=list.filter(o=>(!O.m||o.d.startsWith(O.m))&&(!O.cs||o.cs===O.cs)&&(!O.a||o.a===O.a)&&(!O.pr||o.pr===O.pr)
-    &&(!O.ds||dGroup(o)===O.ds)
+    &&(!O.ds||(O.ds==="stuck"?stuckDays(o)>=0:dGroup(o)===O.ds))
     &&(!q||[o.n,o.p,phone(o.p),o.c,o.t,o.ad].some(x=>String(x||"").toLowerCase().includes(q))));
   list.sort((a,b)=>b.d.localeCompare(a.d)||b.id.localeCompare(a.id));
   const per=50,pages=Math.max(1,Math.ceil(list.length/per));if(O.page>=pages)O.page=pages-1;
@@ -1085,7 +1087,7 @@ function viewOrders(){
     <input class="inp" id="oq" placeholder="قلب بالسمية، التيليفون، المدينة، التراكينغ…" value="${esc(O.q)}" style="flex:1;min-width:200px">
     <select class="inp" id="om" aria-label="الشهر"><option value="">كل الشهور</option>${months.map(m=>`<option value="${m}" ${m===O.m?"selected":""}>${mLabel(m)}</option>`).join("")}</select>
     <select class="inp" id="ocs" aria-label="التأكيد"><option value="">كل التأكيد</option>${opts(CONF,O.cs)}</select>
-    <select class="inp" id="ods" aria-label="التوصيل"><option value="">كل التوصيل</option>${opts(["del","ret","transit","none"],O.ds,["توصلات","رجعات","فالطريق","ما تصيفطاتش"])}</select>
+    <select class="inp" id="ods" aria-label="التوصيل"><option value="">كل التوصيل</option>${opts(["del","ret","transit","none","stuck"],O.ds,["توصلات","رجعات","فالطريق","ما تصيفطاتش","⏳ ما خرجاتش من COLIX ("+stuckList().length+")"])}</select>
     <select class="inp" id="oa" aria-label="المؤكدة"><option value="">كل المؤكدات</option>${opts(actC(),O.a)}</select>
     <select class="inp" id="opr" aria-label="المنتوج"><option value="">كل المنتوجات</option>${opts(actP(),O.pr)}</select>
     ${archChip()}
@@ -1096,7 +1098,7 @@ function viewOrders(){
       <td><div class="who"><b>${esc(o.n)}</b><small class="num">${esc(phone(o.p))} ${waLink(o.p)?`<a class="wa" href="${waLink(o.p)}" target="_blank" rel="noopener">WhatsApp</a>`:""}</small>${custBadge(CM,o.p,o.id)}</div></td>
       <td>${esc(o.c||"")}${o.t||o.sent||o.imp||!fresh(o.d)?"":cityPill(o.c,`data-ofix="${o.id}"`)}</td><td><div class="pcell">${prodImg(o.pr)}<span>${esc(o.pr)}${(o.q||1)>1?` ×${o.q}`:""}</span></div></td><td class="r num">${nf.format(o.pz||0)}</td><td>${esc(o.a||"")}</td>
       <td>${o.t||o.sent?pillConf(o.cs):`<select class="mini" data-k="cs" data-id="${o.id}" aria-label="التأكيد">${opts(CONF.includes(o.cs)?CONF:[o.cs,...CONF],o.cs)}</select>`}</td>
-      <td>${pillDeliv(o.ds)}</td>
+      <td>${pillDeliv(o.ds)}${stuckPill(o)}</td>
       <td class="num" style="font-size:.75rem">${o.t?esc(o.t)+agentCell(o):o.cxErr?`<span class="pill p-bad" title="${esc(o.cxErr)}">COLIX رفض</span>`:o.sent?'<span class="pill p-info">تصيفطات لـ COLIX</span>':(o.cs==="Confirmé"&&!o.imp&&fresh(o.d)?'<span class="pill p-warn">ما تصيفطاتش</span>':"")}</td></tr>`).join("")}
     </tbody></table></div>
     <div class="pager"><button class="btn sec" id="pPrev" ${O.page?"":"disabled"}>السابق</button><span class="num">${O.page+1} / ${pages}</span><button class="btn sec" id="pNext" ${O.page<pages-1?"":"disabled"}>التالي</button></div>`
@@ -1202,6 +1204,13 @@ function bindOrderForm(){
 function dsRank(ds){ds=String(ds||"");if(!ds)return 0;
   const R={"Success":1,"Nouveau Colis":1,"Attente De Ramassage":2,"Ramassé":3,"Reçu":4,"Expédié":5,"Mise en distribution":6};
   if(R[ds])return R[ds];if(ds==="Livré"||RET.has(ds))return 9;return 7}
+/* parcels created at COLIX that never left: still "Nouveau Colis" / "Attente De Ramassage" a day later (usually no stock at COLIX) */
+const STUCK_DAYS=1;
+function sentDay(o){const h=(o.hist||[]).map(histDate).filter(Boolean).sort()[0];return (h||o.d||"").slice(0,10)}
+function stuckDays(o){if(!o.t||o.imp||dsRank(o.ds)>2||CANCEL.has(o.cs))return -1;const d=sentDay(o);if(!d)return -1;
+  const n=Math.floor((new Date(today()+"T00:00:00")-new Date(d+"T00:00:00"))/864e5);return n>=STUCK_DAYS?n:-1}
+function stuckList(){return allOrders().filter(o=>stuckDays(o)>=0)}
+function stuckPill(o){const n=stuckDays(o);return n<0?"":` <span class="pill p-bad" title="تصيفطات لـ COLIX ولكن باقي ما خرجاتش (ممكن ما كاينش الستوك عندهم)">⏳ ما خرجاتش · ${n} ${n===1?"نهار":"أيام"}</span>`}
 function dsNewer(oldDs,newDs){return !!newDs&&newDs!==oldDs&&dsRank(newDs)>=dsRank(oldDs)}
 function parseColix(txt){
   const L=String(txt).split(/\r?\n/),out=[],trk=/^[0-9]{0,2}-?[A-Za-z]{2,4}\d{8,}[A-Za-z]{2}$/;
