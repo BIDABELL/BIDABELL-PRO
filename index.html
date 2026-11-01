@@ -197,6 +197,7 @@ nav a .bd{font-style:normal;background:#E5383B;color:#fff;border-radius:999px;fo
       <a href="#confirmers"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 20a6 6 0 0 0-2.5-5"/></svg><span>المؤكدات</span><i class="bd" hidden></i></a>
       <a href="#stock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg><span>الستوك</span><i class="bd" hidden></i></a>
       <a href="#returns"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg><span>الرجوع</span><i class="bd" hidden></i></a>
+      <a href="#cost"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .9-3 2.2 0 2.9 6 1.6 6 4.6 0 1.3-1.3 2.2-3 2.2-1.4 0-2.6-.6-3-1.6M12 6v2M12 16v2"/></svg><span>تكلفة الإشهار</span><i class="bd" hidden></i></a>
       <a href="#expenses"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>الإشهار والمصاريف</span><i class="bd" hidden></i></a>
       <a href="#settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>الإعدادات</span><i class="bd" hidden></i></a>
   </nav>
@@ -840,6 +841,45 @@ function bindGSearch(){const i=$("gq");if(!i)return;
   document.addEventListener("click",e=>{if(!e.target.closest(".gsearch"))$("gRes").hidden=true});
 }
 
+/* ================= ad cost per delivered order, by the day the orders came in ================= */
+function viewCost(){
+  const C=UI.cost||(UI.cost={from:shiftDays(today(),-13),to:today(),g:""});
+  const grpOk=o=>!C.g||groupOf(o.pr)===C.g;
+  const adsOn=d=>allExp().filter(e=>e.cat==="إشهار Meta"&&e.date===d&&(!C.g||e.prod===C.g||groupOf(e.prod||"")===C.g)).reduce((a,e)=>a+(+e.amount||0),0);
+  /* normal delivery rate of finished parcels in the last 60 days, used to guess how many still on the road will be delivered */
+  const fin=allOrders().filter(o=>grpOk(o)&&o.d>=shiftDays(today(),-60)&&(dGroup(o)==="del"||dGroup(o)==="ret"));
+  const rate=fin.length?fin.filter(o=>dGroup(o)==="del").length/fin.length:0.6;
+  const days=[];for(let d=C.to;d>=C.from&&days.length<62;d=shiftDays(d,-1))days.push(d);
+  const row=d=>{const os=allOrders().filter(o=>o.d===d&&grpOk(o)),ads=adsOn(d);
+    const conf=os.filter(o=>o.cs==="Confirmé").length,del=os.filter(o=>dGroup(o)==="del").length,ret=os.filter(o=>dGroup(o)==="ret").length;
+    const tr=os.filter(o=>o.cs==="Confirmé"&&(dGroup(o)==="transit"||dGroup(o)==="none")).length,exp=del+tr*rate;
+    return{d,ads,n:os.length,conf,del,ret,tr,exp}};
+  const rows=days.map(row).filter(r=>r.n||r.ads);
+  const noAds=rows.filter(r=>!r.ads&&r.n).length;
+  const T=rows.filter(r=>r.ads).reduce((a,r)=>{["ads","n","conf","del","ret","tr","exp"].forEach(k=>a[k]+=r[k]);return a},{ads:0,n:0,conf:0,del:0,ret:0,tr:0,exp:0});
+  const per=(a,b)=>a>0&&b>0?dh(a/b):"—";
+  $("view").innerHTML=`
+  <div class="head"><div><h1>تكلفة الإشهار</h1><div class="sub">لكل نهار: شحال صرفتي فالإشهار، وشحال جاو من طلبية فداك النهار، وشحال منهم توصلو حتى لدابا. هكا كتعرف بشحال قامت عليك كل طلبية توصلات.</div></div></div>
+  <div class="card" style="padding:12px"><div class="bar">
+    <label class="field">من<input type="date" id="coF" value="${esc(C.from)}"></label>
+    <label class="field">حتى<input type="date" id="coT" value="${esc(C.to)}"></label>
+    ${[["","كلشي"],["CHARIT","CHARIT"],["BAGIT","BAGIT"]].map(([k,l])=>`<button class="chip" data-cog="${k}" aria-pressed="${C.g===k}">${l}</button>`).join("")}
+  </div></div>
+  ${noAds?`<div class="card" style="border-color:var(--warn);background:var(--warn-soft)"><b style="color:var(--warn)">⚠️ ${noAds} نهار فيهم طلبيات وما دخلتيش الإشهار ديالهم. ما داخلينش فالمجموع، دخلهم من "الإشهار والمصاريف" باش يكون الحساب كامل.</b></div>`:""}
+  <div class="kpis">
+    <div class="kpi hero"><span class="l">التكلفة ديال كل طلبية توصلات (حتى لدابا)</span><span class="v num">${per(T.ads,T.del)}</span><span class="s">${nf.format(T.del)} توصلات من ${nf.format(T.conf)} مأكدة</span></div>
+    <div class="kpi"><span class="l">المتوقع ملي يتوصلو اللي فالطريق</span><span class="v num">${per(T.ads,T.exp)}</span><span class="s">${nf.format(T.tr)} باقي فالطريق · نسبة التوصيل ${Math.round(rate*100)}%</span></div>
+    <div class="kpi"><span class="l">الإشهار</span><span class="v num">${dh(T.ads)}</span><span class="s">${per(T.ads,T.n)} على كل طلبية جات</span></div>
+    <div class="kpi"><span class="l">الطلبيات</span><span class="v num">${nf.format(T.n)}</span><span class="s">${nf.format(T.ret)} رجعات</span></div>
+  </div>
+  <div class="card" style="padding:8px 12px">${rows.length?`<div class="tw"><table><thead><tr><th>النهار</th><th class="r">الإشهار</th><th class="r">الطلبيات</th><th class="r">مأكدة</th><th class="r">توصلات</th><th class="r">فالطريق</th><th class="r">رجعات</th><th class="r">على كل طلبية</th><th class="r">على كل توصلات (دابا)</th><th class="r">المتوقع</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td class="num">${esc(r.d)}</td><td class="r num">${r.ads?nf.format(r.ads):"—"}</td><td class="r num">${r.n}</td><td class="r num">${r.conf}</td><td class="r num">${r.del}</td><td class="r num">${r.tr||""}</td><td class="r num">${r.ret||""}</td><td class="r num">${per(r.ads,r.n)}</td><td class="r num"><b>${per(r.ads,r.del)}</b></td><td class="r num">${!r.ads?"<small>ما دخلتيش الإشهار</small>":r.tr?per(r.ads,r.exp):"<small>سالا</small>"}</td></tr>`).join("")}
+  </tbody></table></div><p class="note">"دابا" = غير اللي توصلو حتى لهاد الساعة، كينقص كل ما توصل شي واحد. "المتوقع" = إلى توصلو اللي فالطريق بنفس النسبة العادية ديالك (${Math.round(rate*100)}%). ملي كيسالي النهار (ما بقا حتى واحد فالطريق) كيبان "سالا" والرقم ديال "دابا" هو النهائي.</p>`:'<p class="empty">ما كاين حتى إشهار ولا طلبية فهاد الفترة</p>'}</div>`;
+  $("coF").onchange=e=>{if(e.target.value){C.from=e.target.value;viewCost()}};
+  $("coT").onchange=e=>{if(e.target.value){C.to=e.target.value;viewCost()}};
+  document.querySelectorAll("[data-cog]").forEach(b=>b.onclick=()=>{C.g=b.dataset.cog;viewCost()});
+}
+
 /* ================= import from the old page (one time) ================= */
 let IMP_MSG="";
 async function importOld(file){
@@ -870,7 +910,7 @@ async function importOld(file){
 
 
 /* ================= router ================= */
-const VIEWS={notes:viewNotes,returns:viewRet,youcan:viewYC,dashboard:viewDash,orders:viewOrders,confirmers:viewConf,stock:viewStock,expenses:viewExp,settings:viewSettings};
+const VIEWS={cost:viewCost,notes:viewNotes,returns:viewRet,youcan:viewYC,dashboard:viewDash,orders:viewOrders,confirmers:viewConf,stock:viewStock,expenses:viewExp,settings:viewSettings};
 function route(){
   if(!SB||!PROFILE)return;if(!ISOWNER){if(CV.doc)viewConfirmer();return}
   const k=(location.hash||"#dashboard").slice(1);const v=VIEWS[k]?k:"dashboard";
