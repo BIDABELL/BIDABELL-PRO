@@ -522,11 +522,19 @@ async function pushOutbox(manual){
     /* save first: the server reads the orders from the database */
     await Promise.all([...new Set(list.map(o=>o.d.slice(0,7)))].map(m=>writeOrders(m)));
     const r=await fn("send");const res=r.results||[];
+    /* remember which ones COLIX refused, so they stay listed with "resend / delete" */
+    const nm=v=>String(v||"").trim().toLowerCase(),refused=res.filter(x=>!x.tracking),marked=new Set();
+    refused.forEach(x=>{const o=list.find(o=>!marked.has(o.id)&&((x.id&&x.id===o.id)||(x.order_id&&x.order_id===o.id)))||list.find(o=>!marked.has(o.id)&&nm(x.name)===nm(o.n)&&(!x.ville||nm(x.ville)===nm(o.c)))||list.find(o=>!marked.has(o.id)&&nm(x.name)===nm(o.n));
+      if(o){marked.add(o.id);o.cxErr=String(x.status||x.error||x.message||"COLIX رفض").slice(0,200)}});
+    if(marked.size)await Promise.all([...new Set(list.filter(o=>marked.has(o.id)).map(o=>o.d.slice(0,7)))].map(m=>writeOrders(m)));
     UI.ord.sentRes=res;route();
     const ok=res.filter(x=>x.tracking).length,bad=res.length-ok;
     toast(bad?`تصيفطو ${ok} · ${bad} رفضهم COLIX`:`✅ تصيفطو ${ok} كولي لـ COLIX`);
     return true;
-  }catch(e){toast("ما تصيفطوش لـ COLIX: "+e.message)}
+  }catch(e){toast("ما تصيفطوش لـ COLIX: "+e.message);
+    /* nothing went out: keep them listed with the reason, so they can be resent or deleted */
+    const still=list.filter(o=>!o.t&&!o.sent);still.forEach(o=>{o.cxErr=String(e.message||"ما تصيفطاتش").slice(0,200)});
+    try{await Promise.all([...new Set(still.map(o=>o.d.slice(0,7)))].map(m=>writeOrders(m)))}catch(_){} route()}
   finally{PUSHING=false}
 }
 
