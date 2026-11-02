@@ -1136,6 +1136,10 @@ function viewOrders(){
     <div class="actions">${outboxCandidates().length?`<button class="btn" id="addColis" style="background:var(--navy);color:var(--navy-ink)">Add colis (${outboxCandidates().length})</button>`:""}<button class="btn sec" id="pasteO">لصق من COLIX</button><button class="btn" id="newO">+ طلبية جديدة</button></div></div>
   ${O.sentRes?`<div class="card" style="border-color:var(--gold)"><div class="head"><h2>${O.sentRes.some(x=>!x.tracking)?"⚠️":"✅"} تصيفطو ${O.sentRes.filter(x=>x.tracking).length} كولي لـ COLIX</h2><button class="btn sec" id="sentX" style="padding:4px 10px">سد</button></div>
     <div class="list">${O.sentRes.map(x=>`<div class="li"><span><b>${esc(x.name)}</b> <small>${esc(x.ville)}</small></span><span class="num ${x.tracking?"pos":"neg"}" style="font-size:.8rem">${esc(x.tracking||x.status)}</span></div>`).join("")||'<p class="note">ما كاين حتى كولي جديد</p>'}</div></div>`:""}
+  ${(()=>{const F=allOrders().filter(o=>o.cxErr&&!o.t).sort((a,b)=>b.d.localeCompare(a.d));if(!F.length)return "";
+    return `<div class="card" style="border-color:var(--bad)"><div class="head" style="margin-bottom:4px"><div><h2 style="margin:0">⚠️ ${F.length} طلبية ما تصيفطاتش لـ COLIX</h2><div class="sub">درتي ليهم Add colis ولكن COLIX رفضهم. صلح السبب (المدينة، النمرة...) وعاود الإرسال، ولا احذفها.</div></div></div>
+    <div class="list">${F.map(o=>`<div class="li" style="display:block"><span style="display:block"><b>${esc(o.n)}</b> <small class="num">${esc(phone(o.p))}</small> · ${esc(o.c||"")} · ${esc(o.pr)} · <span class="num">${nf.format(o.pz||0)} DH</span><br><small style="color:var(--bad)">السبب: ${esc(o.cxErr)}</small></span>
+      <span class="bar" style="gap:6px;margin-top:6px"><button class="btn sec" type="button" data-cxedit="${esc(o.id)}" style="padding:5px 10px">✏️ صلح</button><button class="btn" type="button" data-cxre="${esc(o.id)}" style="padding:5px 10px">🔁 عاود الإرسال</button><button class="btn danger" type="button" data-cxdel="${esc(o.id)}" style="padding:5px 10px">${UI.cxDelArm===o.id?"متأكد؟ كليكي عاوتاني":"🗑 حذف"}</button></span></div>`).join("")}</div></div>`})()}
   ${O.paste?`<div class="card"><h2>لصق اللائحة ديال COLIX</h2><div class="sub">فـ COLIX حل <b>List Colis</b>، ختار <b>Afficher 100</b>، دير <b>Ctrl+A</b> ومن بعد <b>Ctrl+C</b>، ولصق هنا. الحالة والمكلفة بالريكلاماسيون (🎧 السمية والنمرة) ديال كل طلبية كيتبدلو حسب التراكينغ.</div>
     <textarea id="pasteTxt" class="inp" rows="8" style="direction:ltr;text-align:left;resize:vertical" placeholder="SBB10261521618HS&#10;Normal&#10;…&#10;شريط مطاطي 10 متر-(1)	Non Payé	Expédié"></textarea>
     <div class="actions"><button class="btn" id="pasteGo">بدل الحالات</button><button class="btn sec" id="pasteX">رجوع</button></div></div>`:""}
@@ -1172,6 +1176,15 @@ function viewOrders(){
     if(bad.length&&!O.cxArm){O.cxArm=true;b.textContent=`⚠ ${bad.length} فيهم المدينة غالطة · كليكي عاوتاني باش تصيفط`;toast("صلح المدينة ف: "+bad.map(o=>o.n).slice(0,5).join("، "));return}
     O.cxArm=false;b.disabled=true;b.textContent="كيتصيفطو…";await pushOutbox(true);if($("addColis")){b.disabled=false}};
   if($("sentX"))$("sentX").onclick=()=>{O.sentRes=null;viewOrders()};
+  document.querySelectorAll("[data-cxedit]").forEach(x=>x.onclick=()=>{const o=allOrders().find(y=>y.id===x.dataset.cxedit);if(o){O.edit=clone(o);O.armed=false;viewOrders();window.scrollTo(0,0)}});
+  document.querySelectorAll("[data-cxre]").forEach(x=>x.onclick=async()=>{const o=allOrders().find(y=>y.id===x.dataset.cxre);if(!o)return;
+    x.disabled=true;x.textContent="كيتصيفط…";delete o.cxErr;delete o.sent;
+    try{await writeOrders(o.d.slice(0,7))}catch(e){toast(failMsg(e));viewOrders();return}
+    await pushOutbox(true);viewOrders()});
+  document.querySelectorAll("[data-cxdel]").forEach(x=>x.onclick=async()=>{const id=x.dataset.cxdel;
+    if(UI.cxDelArm!==id){UI.cxDelArm=id;viewOrders();return}UI.cxDelArm=null;
+    const o=allOrders().find(y=>y.id===id);if(!o)return;const m=o.d.slice(0,7);ORD[m]=(ORD[m]||[]).filter(y=>y.id!==id);viewOrders();
+    try{await writeOrders(m);toast("تحذفات الطلبية")}catch(e){toast(failMsg(e))}});
   $("pasteO").onclick=()=>{O.paste=!O.paste;viewOrders();if(O.paste)$("pasteTxt").focus()};
   if($("pasteX"))$("pasteX").onclick=()=>{O.paste=false;viewOrders()};
   if($("pasteGo"))$("pasteGo").onclick=async()=>{
