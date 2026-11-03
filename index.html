@@ -360,7 +360,16 @@ function money(o){
   return r;
 }
 /* the day a parcel was delivered: saved delivery date, else the "Livré" step in the COLIX history, else the order day */
-function delDay(o){if(o.ld)return o.ld;const h=(o.hist||[]).filter(m=>/livr/i.test(String(m.status||""))).map(m=>(histDate(m).match(/\d{4}-\d{2}-\d{2}/)||[])[0]).filter(Boolean).sort();return h[h.length-1]||o.d}
+function cxLivDay(o){const h=(o.hist||[]).filter(m=>/livr/i.test(String(m.status||""))).map(m=>(histDate(m).match(/\d{4}-\d{2}-\d{2}/)||[])[0]).filter(Boolean).sort();return h[h.length-1]||""}
+function delDay(o){return cxLivDay(o)||o.ld||o.d}
+/* delivered parcels with no COLIX history yet: fetch their details once, in the background, so the delivery day comes from COLIX */
+let LIVFILL=false;const LIVTRIED=new Set();
+async function fillLivDays(){
+  if(!ISOWNER||LIVFILL)return;LIVFILL=true;
+  const todo=allOrders().filter(o=>o.t&&dGroup(o)==="del"&&!cxLivDay(o)&&!LIVTRIED.has(o.id)).sort((a,b)=>b.d.localeCompare(a.d)).slice(0,60);
+  for(const o of todo){LIVTRIED.add(o.id);try{await fn("detail",{id:o.id})}catch(e){}await new Promise(r=>setTimeout(r,1200))}
+  LIVFILL=false;
+}
 /* inR (optional): a date test for the period. Order counts use the order day; money of a delivered order
    lands in the period it was DELIVERED (cash in), returns in the period of the order. */
 function stats(orders,exps,inR){
@@ -497,7 +506,7 @@ async function afterLogin(user){
   try{await loadAll()}catch(e){$("view").innerHTML=`<p class="empty">ما قدرتش نجيب الداتا (${esc(e.message||e)}). عاود حل الصفحة.</p>`;return}
   subscribe();
   const b=$("syncBtn");b.hidden=false;b.onclick=()=>trackNow(true);
-  updSync();route();schedulePublish();
+  updSync();route();schedulePublish();setTimeout(fillLivDays,4000);
 }
 let rt=null;
 function refresh(){if(!(ready.o&&ready.e&&ready.s))return;if(ISOWNER)schedulePublish();clearTimeout(rt);rt=setTimeout(()=>{
