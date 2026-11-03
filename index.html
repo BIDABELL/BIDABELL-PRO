@@ -753,8 +753,8 @@ function normProd(raw){
   const s=String(raw||"").trim(),l=s.toLowerCase();if(!s)return "";
   const exact=ST.products.find(p=>p.name.toLowerCase()===l);if(exact)return exact.name;
   const bag=/bag|باكيط|chrom|كروم/.test(l),ten=/10|1o|عشر/.test(l),pick=n=>(ST.products.find(p=>p.name===n)||{}).name;
-  if(/protec|aile|حماية|carbon|كاربون/.test(l))return pick("PROTECTION D'AILES")||s;
-  if(bag&&/(شريط|charit|مطاط)/.test(l))return pick(ten?"PACK BAGIT + CHARIT 10M":"PACK BAGIT + CHARIT 5M")||s;
+  if(/protec|aile|رفارف|رفرف|حواف|carbon|كاربون/.test(l))return pick("PROTECTION D'AILES")||s;
+  if(bag&&/(charit|مطاط|pack)/.test(l))return pick(ten?"PACK BAGIT + CHARIT 10M":"PACK BAGIT + CHARIT 5M")||s;
   if(bag&&/30/.test(l))return pick("BAGIT CHROME 30M")||s;
   if(bag)return pick("BAGIT CHROME 15M")||s;
   if(/bavit|pnou|بافيت/.test(l))return pick(/2/.test(l)?"BAVIT PNOU 2PC":"BAVIT PNOU 4PC")||s;
@@ -1461,7 +1461,7 @@ function viewExp(){
 }
 
 /* ================= daily ads ================= */
-function adsTargets(){return ["CHARIT","BAGIT"]}
+function adsTargets(){return ["CHARIT","BAGIT","PROTECTION D'AILES"]}
 function adsOf(date){return (EXP[date.slice(0,7)]||[]).filter(e=>e.cat==="إشهار Meta"&&e.date===date)}
 function adsPanel(){
   const X=UI.exp;if(!X.adsDate||X.adsDate.slice(0,7)!==X.m)X.adsDate=X.m===today().slice(0,7)?today():monthStart(X.m);
