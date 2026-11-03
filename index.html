@@ -359,11 +359,19 @@ function money(o){
   else if(g==="ret"){r.ret=+ST.returnFee||0;r.pack=+P.pack||0}
   return r;
 }
-function stats(orders,exps){
-  const s={n:orders.length,conf:0,cancel:0,shipped:0,del:0,ret:0,transit:0,rev:0,prod:0,deliv:0,pack:0,cf:0,retc:0,ads:0,other:0};
-  orders.forEach(o=>{
+/* the day a parcel was delivered: saved delivery date, else the "Livré" step in the COLIX history, else the order day */
+function delDay(o){if(o.ld)return o.ld;const h=(o.hist||[]).filter(m=>/livr/i.test(String(m.status||""))).map(m=>(histDate(m).match(/\d{4}-\d{2}-\d{2}/)||[])[0]).filter(Boolean).sort();return h[h.length-1]||o.d}
+/* inR (optional): a date test for the period. Order counts use the order day; money of a delivered order
+   lands in the period it was DELIVERED (cash in), returns in the period of the order. */
+function stats(orders,exps,inR){
+  const cnt=inR?orders.filter(o=>inR(o.d)):orders;
+  const s={n:cnt.length,conf:0,cancel:0,shipped:0,del:0,ret:0,transit:0,rev:0,prod:0,deliv:0,pack:0,cf:0,retc:0,ads:0,other:0};
+  cnt.forEach(o=>{
     if(o.cs==="Confirmé")s.conf++; if(CANCEL.has(o.cs))s.cancel++;
     const g=dGroup(o); if(g!=="none")s.shipped++; if(g==="del")s.del++; if(g==="ret")s.ret++; if(g==="transit")s.transit++;
+  });
+  orders.forEach(o=>{
+    if(inR){const g=dGroup(o);if(g==="del"?!inR(delDay(o)):!inR(o.d))return}
     const m=money(o);s.rev+=m.rev;s.prod+=m.prod;s.deliv+=m.deliv;s.pack+=m.pack;s.cf+=m.conf;s.retc+=m.ret;
   });
   exps.forEach(e=>{if(e.cat==="إشهار Meta")s.ads+=+e.amount||0;else s.other+=+e.amount||0});
@@ -1001,10 +1009,10 @@ function setPreset(p){
 function viewDash(){
   const D=UI.dash;
   const inRange=d=>d>=D.from&&d<=D.to;
-  const ords=curOrders().filter(o=>(inRange(o.d)||(o.ld&&inRange(o.ld)))&&(!D.prod||o.pr===D.prod));
-  const expsR=curExp().filter(e=>inRange(e.date)),ordsR=curOrders().filter(o=>inRange(o.d)||(o.ld&&inRange(o.ld)));
+  const ords=curOrders().filter(o=>(inRange(o.d)||(dGroup(o)==="del"&&inRange(delDay(o))))&&(!D.prod||o.pr===D.prod));
+  const expsR=curExp().filter(e=>inRange(e.date)),ordsR=curOrders().filter(o=>inRange(o.d));
   const exps=D.prod?expFor(expsR,D.prod,ordsR):expsR;
-  const s=stats(ords,exps);
+  const s=stats(ords,exps,inRange);
   const todayN=allOrders().filter(o=>o.d===today()&&(!D.prod||o.pr===D.prod)).length;
   const presets=[["today","اليوم"],["7","7 أيام"],["month","هاد الشهر"],["last","الشهر اللي فات"],["all","كلشي"]];
   const kp=(l,v,sub,cls,meter,mc)=>`<div class="kpi ${cls||""}"><span class="l">${l}</span><span class="v num">${v}</span>${sub?`<span class="s">${sub}</span>`:""}${meter!=null?`<div class="meter"><i style="width:${Math.min(100,meter)}%;background:var(${mc})"></i></div>`:""}</div>`;
@@ -1013,17 +1021,17 @@ function viewDash(){
   const allP=curOrders().filter(o=>!D.prod||o.pr===D.prod), allE0=curExp();
   const allO0=curOrders();
   const mexp=m=>{const em=allE0.filter(e=>e.date.startsWith(m));return D.prod?expFor(em,D.prod,allO0.filter(o=>o.d.startsWith(m))):em};
-  const months=[...new Set(allP.map(o=>o.d.slice(0,7)).concat(allE0.filter(e=>!D.prod||mexp(e.date.slice(0,7)).length).map(e=>e.date.slice(0,7))))].sort();
-  const mrows=months.map(m=>({m,s:stats(allP.filter(o=>o.d.startsWith(m)),mexp(m))}));
+  const months=[...new Set(allP.map(o=>o.d.slice(0,7)).concat(allP.filter(o=>dGroup(o)==="del").map(o=>delDay(o).slice(0,7))).concat(allE0.filter(e=>!D.prod||mexp(e.date.slice(0,7)).length).map(e=>e.date.slice(0,7))))].sort();
+  const mrows=months.map(m=>({m,s:stats(allP.filter(o=>o.d.startsWith(m)||(dGroup(o)==="del"&&delDay(o).startsWith(m))),mexp(m),d=>d.startsWith(m))}));
 
   const prods=[...new Set(ords.map(o=>o.pr))];
-  const prow0=prods.map(p=>{const os=ords.filter(o=>o.pr===p);return{p,s:stats(os,expFor(exps,p,ords))}}).sort((a,b)=>b.s.n-a.s.n);
+  const prow0=prods.map(p=>{const os=ords.filter(o=>o.pr===p);return{p,s:stats(os,expFor(exps,p,ordsR),inRange)}}).sort((a,b)=>b.s.n-a.s.n);
   /* products sharing one ad (CHARIT 5m + 10m, BAGIT + packs): a total row first, then each product under it */
   const prow=[],used=new Set();
   prow0.forEach(row=>{if(used.has(row.p))return;const g=groupOf(row.p);
     const members=g?prow0.filter(x=>groupOf(x.p)===g):[row];
     if(g&&members.length>1){const names=members.map(x=>x.p);
-      prow.push({p:g+" (المجموع)",s:stats(ords.filter(o=>names.includes(o.pr)),exps.filter(e=>e.prod===g||names.includes(e.prod))),total:true});
+      prow.push({p:g+" (المجموع)",s:stats(ords.filter(o=>names.includes(o.pr)),exps.filter(e=>e.prod===g||names.includes(e.prod)),inRange),total:true});
       members.forEach(x=>{used.add(x.p);prow.push({...x,sub:true})})}
     else{used.add(row.p);prow.push(row)}});
   const genAds=D.prod?0:exps.filter(e=>!e.prod||e.prod==="عام"||(AD_GROUPS[e.prod]&&!ords.some(o=>groupOf(o.pr)===e.prod))).reduce((a,e)=>a+(+e.amount||0),0);
