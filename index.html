@@ -360,7 +360,7 @@ function money(o){
   return r;
 }
 /* the day a parcel was delivered: saved delivery date, else the "Livré" step in the COLIX history, else the order day */
-function cxLivDay(o){const h=(o.hist||[]).filter(m=>/livr/i.test(String(m.status||""))).map(m=>(histDate(m).match(/\d{4}-\d{2}-\d{2}/)||[])[0]).filter(Boolean).sort();return h[h.length-1]||""}
+function cxLivDay(o){const h=(o.hist||[]).filter(m=>/livr/i.test(String(m.status||""))).map(m=>{const x=histDate(m);let r=x.match(/(\d{4})-(\d{2})-(\d{2})/);if(r)return r[0];r=x.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);return r?r[3]+"-"+pad(+r[2])+"-"+pad(+r[1]):""}).filter(Boolean).sort();return h[h.length-1]||""}
 function delDay(o){return cxLivDay(o)||o.ld||o.d}
 /* delivered parcels with no COLIX history yet: fetch their details once, in the background, so the delivery day comes from COLIX */
 let LIVFILL=false;const LIVTRIED=new Set();
