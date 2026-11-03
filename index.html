@@ -1023,6 +1023,8 @@ function viewDash(){
   const exps=D.prod?expFor(expsR,D.prod,ordsR):expsR;
   const s=stats(ords,exps,inRange);
   const todayN=allOrders().filter(o=>o.d===today()&&(!D.prod||o.pr===D.prod)).length;
+  const livT=allOrders().filter(o=>dGroup(o)==="del"&&delDay(o)===today()&&(!D.prod||o.pr===D.prod)),livTsum=livT.reduce((a,o)=>a+(+o.pz||0),0);
+  const livR=ords.filter(o=>dGroup(o)==="del"&&inRange(delDay(o))).length;
   const presets=[["today","اليوم"],["7","7 أيام"],["month","هاد الشهر"],["last","الشهر اللي فات"],["all","كلشي"]];
   const kp=(l,v,sub,cls,meter,mc)=>`<div class="kpi ${cls||""}"><span class="l">${l}</span><span class="v num">${v}</span>${sub?`<span class="s">${sub}</span>`:""}${meter!=null?`<div class="meter"><i style="width:${Math.min(100,meter)}%;background:var(${mc})"></i></div>`:""}</div>`;
   const rc=s.conf?s.del/s.conf*100:0, rr=s.conf?s.ret/s.conf*100:0, cr=s.n?s.conf/s.n*100:0;
@@ -1065,9 +1067,10 @@ function viewDash(){
   </div>
   <div class="kpis">
     ${kp("الربح الصافي",dh(s.profit),"المداخيل ناقص كاع التكاليف","hero")}
-    ${kp("المداخيل",dh(s.rev),"غير الطلبيات اللي توصلات")}
+    ${kp("المداخيل",dh(s.rev),nf.format(livR)+" طلبية توصلات فهاد الفترة")}
     ${kp("التكاليف",dh(s.costs),"منها الإشهار: "+dh(s.ads))}
     ${kp("طلبيات اليوم",nf.format(todayN))}
+    ${kp("توصلات اليوم",nf.format(livT.length),livT.length?dh(livTsum)+" عند COLIX":"حتى وحدة باقي","",null)}
     ${kp("كاع الطلبيات",nf.format(s.n),s.cancel?s.cancel+" ملغية":"")}
     ${kp("التأكيد",pct(s.conf,s.n),nf.format(s.conf)+" مأكدة","",cr,"--good")}
     ${kp("التوصيل",pct(s.del,s.conf),nf.format(s.del)+" توصلات","",rc,"--good")}
