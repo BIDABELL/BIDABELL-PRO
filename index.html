@@ -1433,12 +1433,62 @@ function viewStock(){
     <td><div class="bar" style="flex-wrap:nowrap"><input class="inp num" style="width:80px" inputmode="numeric" id="rs${i}" placeholder="0" aria-label="الكمية"><button class="btn sec" data-rs="${i}" style="padding:5px 10px">زيد</button></div></td></tr>`).join("")}
   </tbody></table></div>
   <p class="note">ملي تشري سلعة جديدة، كتب الكمية وكليكي "زيد". ثمن الشرا ديال الطلبيات اللي توصلات كيتحسب بوحدو فالأرباح.</p></div>
-  ${(ST.restocks||[]).length?`<div class="card"><h2>سجل دخول السلعة</h2><div class="list">${ST.restocks.slice().reverse().slice(0,30).map(r=>`<div class="li"><span>${esc(r.p)} <small class="num">${esc(r.date)}</small></span><span class="num">+${nf.format(r.qty)}</span></div>`).join("")}</div></div>`:""}`;
+  ${(ST.restocks||[]).length?`<div class="card"><h2>سجل دخول السلعة</h2><div class="list">${ST.restocks.slice().reverse().slice(0,30).map(r=>`<div class="li"><span>${esc(r.p)} <small class="num">${esc(r.date)}</small></span><span class="num">+${nf.format(r.qty)}</span></div>`).join("")}</div></div>`:""}
+  ${cxStockCard(low)}`;
+  bindCxStock();
   document.querySelectorAll("[data-rs]").forEach(b=>b.onclick=async()=>{
     const i=+b.dataset.rs,q=parseInt($("rs"+i).value);if(!(q>0)){toast("كتب الكمية");return}
     const p=rows[i].p;if(!p.stock0){const r=rows[i];p.stock0=r.del+r.tr+r.back}
     p.stock0=(+p.stock0||0)+q;ST.restocks=[...(ST.restocks||[]),{p:p.name,qty:q,date:today()}];
     viewStock();try{await writeSettings();toast("تزاد الستوك ديال "+p.name)}catch(e){toast(failMsg(e))}
+  });
+}
+
+/* ================= stock held at COLIX =================
+   ST.cxStock[product] = {sent, from}: everything Lahoucine sent to COLIX's warehouse (typed by hand) since `from`.
+   A parcel takes one item out of COLIX's stock once it really left (Ramassé or later). Parcels stuck at
+   "Nouveau Colis" / "Attente De Ramassage" did not take anything, and neither did one cancelled before leaving. */
+function cxLeft(o){
+  if(!o.t||o.imp)return false;
+  const r=dsRank(o.ds);if(r<3)return false;
+  if(o.ds==="Annulé")return (o.hist||[]).some(m=>{const x=dsRank(String(m.status||""));return x>=3&&x<9});
+  return true;
+}
+function cxStockRows(){
+  const S=ST.cxStock||{},ords=allOrders();
+  return ST.products.filter(p=>!p.off).map(p=>{
+    const s=S[p.name]||{sent:0,from:""},from=s.from||"";
+    const out=from?ords.filter(o=>o.pr===p.name&&cxLeft(o)&&sentDay(o)>=from).reduce((a,o)=>a+(+o.q||1),0):0;
+    const wait=from?ords.filter(o=>o.pr===p.name&&o.t&&!o.imp&&dsRank(o.ds)<3&&!CANCEL.has(o.cs)&&sentDay(o)>=from).reduce((a,o)=>a+(+o.q||1),0):0;
+    return{p,sent:+s.sent||0,from,out,wait,left:(+s.sent||0)-out,tracked:!!from};
+  });
+}
+function cxStockCard(low){
+  const rows=cxStockRows(),log=(ST.cxSends||[]).slice().reverse().slice(0,30);
+  const tot=rows.filter(r=>r.tracked).reduce((a,r)=>a+Math.max(0,r.left),0);
+  return `<div class="card" id="cxStock" style="border-color:var(--gold)">
+  <div class="head" style="margin-bottom:4px"><div><h2 style="margin:0">📦 الستوك عند COLIX</h2>
+    <div class="sub">كتب شحال صيفطتي لـ COLIX. كل كولي خرج من عندهم كينقص بوحدو. باقي عندهم: <b class="num">${nf.format(tot)}</b> حبة</div></div></div>
+  <div class="tw"><table><thead><tr><th>المنتوج</th><th class="r">صيفطت لـ COLIX</th><th class="r">خرج من COLIX</th><th class="r">كيتسناو (ما خرجوش)</th><th class="r">باقي عند COLIX</th><th></th><th>صيفطت ليهم</th></tr></thead><tbody>
+  ${rows.map(({p,sent,out,wait,left,tracked},i)=>`<tr><td>${esc(p.name)}${tracked?`<br><small class="num" style="opacity:.6">من ${esc(rows[i].from)}</small>`:""}</td>
+    <td class="r num">${tracked?nf.format(sent):"—"}</td><td class="r num">${tracked?nf.format(out):"—"}</td><td class="r num">${tracked&&wait?`<span style="color:var(--warn)">${wait}</span>`:tracked?0:"—"}</td>
+    <td class="r num"><b>${tracked?nf.format(left):"—"}</b></td>
+    <td>${!tracked?'<span class="pill p-none">ما مسجلش</span>':left<=0?'<span class="pill p-bad">سالا عند COLIX</span>':left<=wait?'<span class="pill p-bad">ما كافيش للي كيتسناو</span>':left<low?'<span class="pill p-warn">قرب يسالي</span>':'<span class="pill p-good">مزيان</span>'}</td>
+    <td><div class="bar" style="flex-wrap:nowrap"><input class="inp num" style="width:80px" inputmode="numeric" id="cxs${i}" placeholder="0" aria-label="الكمية اللي صيفطتي لـ COLIX"><button class="btn sec" data-cxs="${i}" style="padding:5px 10px">زيد</button></div></td></tr>`).join("")}
+  </tbody></table></div>
+  <p class="note">ملي تصيفط سلعة لـ COLIX، كتب الكمية وكليكي "زيد". الحساب كيبدا من النهار اللي سجلتي فيه أول مرة، والطلبيات القديمة ما كتنقصش. الكولي اللي رجع كيرجع ليك نتا (ماشي لـ COLIX)، إيلا رجعوه لـ COLIX زيدو هنا. باش تصحح غلطة، كتب رقم بالناقص (مثلا ‎-5).</p>
+  ${log.length?`<h2 style="margin-top:10px">سجل الإرسال لـ COLIX</h2><div class="list">${log.map(r=>`<div class="li"><span>${esc(r.p)} <small class="num">${esc(r.date)}</small></span><span class="num ${r.qty<0?"neg":""}">${r.qty>0?"+":""}${nf.format(r.qty)}</span></div>`).join("")}</div>`:""}
+  </div>`;
+}
+function bindCxStock(){
+  const rows=cxStockRows();
+  document.querySelectorAll("[data-cxs]").forEach(b=>b.onclick=async()=>{
+    const i=+b.dataset.cxs,q=parseInt($("cxs"+i).value);if(!q){toast("كتب الكمية");return}
+    const p=rows[i].p,S=ST.cxStock=Object.assign({},ST.cxStock||{}),cur=Object.assign({sent:0,from:""},S[p.name]||{});
+    if(!cur.from)cur.from=today();
+    cur.sent=(+cur.sent||0)+q;S[p.name]=cur;
+    ST.cxSends=[...(ST.cxSends||[]),{p:p.name,qty:q,date:today()}];
+    viewStock();try{await writeSettings();toast((q>0?"تزاد":"تصحح")+" الستوك عند COLIX: "+p.name)}catch(e){toast(failMsg(e))}
   });
 }
 
