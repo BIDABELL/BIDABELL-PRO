@@ -1,5 +1,5 @@
 /* FIT COACH PRO service worker: offline app shell. Data lives in localStorage, never in this cache. */
-const CACHE = "fitcoach-v1";
+const CACHE = "fitcoach-v2";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-64.png", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => {
