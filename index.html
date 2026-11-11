@@ -1279,8 +1279,19 @@ function bindOrderForm(){
   /* once a parcel is sent to COLIX the order is locked: edits here would not reach COLIX */
   if(O.edit&&(O.edit.t||O.edit.sent)){
     document.querySelectorAll("#oform input,#oform select").forEach(e=>e.disabled=true);
-    const sb=$("oform").querySelector("[type=submit]");if(sb)sb.remove();if($("fDel"))$("fDel").remove();
-    const n=document.createElement("p");n.className="note";n.textContent="هاد الطلبية تصيفطات لـ COLIX، ما بقاتش كتتبدل هنا. إلا بغيتي تبدل شي حاجة، بدلها ف COLIX.";$("oform").querySelector(".actions").before(n);
+    const sb=$("oform").querySelector("[type=submit]");if(sb)sb.remove();
+    const cur=allOrders().find(x=>x.id===O.edit.id)||O.edit,notOut=dsRank(cur.ds)<=2; /* not picked up yet: can be sent again */
+    const n=document.createElement("p");n.className="note";n.textContent="هاد الطلبية تصيفطات لـ COLIX، ما بقاتش كتتبدل هنا. إلا بغيتي تبدل شي حاجة، بدلها ف COLIX."+(notOut?" إلا ما خرجاتش، تقدر تعاود تصيفطها ككولي جديد.":"")+" المسح كيمسحها غير من BIDABELL Pro، الكولي كيبقى ف COLIX.";$("oform").querySelector(".actions").before(n);
+    if(notOut&&$("fDel")){
+      /* same as "عاود الإرسال" on the stuck list: forget the old parcel and send the order again as a new one */
+      const rb=document.createElement("button");rb.type="button";rb.className="btn";rb.id="fResend";O.reArm=false;rb.textContent="🔁 عاود الإرسال لـ COLIX";$("fDel").before(rb);
+      rb.onclick=async()=>{
+        if(!O.reArm){O.reArm=true;rb.textContent="متأكد؟ كليكي مرة أخرى";return}
+        O.reArm=false;const o=allOrders().find(x=>x.id===O.edit.id);if(!o)return;rb.disabled=true;rb.textContent="كيتصيفط…";
+        if(o.t)o.oldT=[...(o.oldT||[]),o.t].slice(-5);["t","ds","hist","cx","cxAt","sent","cxErr","cxAgent","ld"].forEach(k=>delete o[k]);
+        try{await writeOrders(o.d.slice(0,7))}catch(e){toast(failMsg(e));O.edit=null;viewOrders();return}
+        O.edit=null;await pushOutbox(true);viewOrders()};
+    }
   }
   $("f_pr").onchange=e=>{const p=prodOf(e.target.value);if(p.price)$("f_pz").value=p.price*(+$("f_q").value||1)};
   $("fCancel").onclick=()=>{O.edit=null;viewOrders()};
