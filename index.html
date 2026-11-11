@@ -1162,7 +1162,10 @@ function viewOrders(){
   const O=UI.ord,q=O.q.trim().toLowerCase();
   let list=curOrders();
   const months=[...new Set(list.map(o=>o.d.slice(0,7)))].sort().reverse();
-  list=list.filter(o=>(!O.m||o.d.startsWith(O.m))&&(!O.cs||o.cs===O.cs)&&(!O.a||o.a===O.a)&&(!O.pr||o.pr===O.pr)
+  /* one day: what went to COLIX that day and what was delivered that day (whatever the order day or month) */
+  const day=O.day||"",base=list,sentOn=o=>!!(o.t||o.sent)&&sendDay(o)===day,livOn=o=>o.ds==="Livré"&&delDay(o)===day;
+  const daySent=day?base.filter(sentOn):[],dayLiv=day?base.filter(livOn):[];
+  list=list.filter(o=>(day?(sentOn(o)||livOn(o)):(!O.m||o.d.startsWith(O.m)))&&(!O.cs||o.cs===O.cs)&&(!O.a||o.a===O.a)&&(!O.pr||o.pr===O.pr)
     &&(!O.ds||(O.ds==="stuck"?stuckDays(o)>=0:dGroup(o)===O.ds))
     &&(!q||[o.n,o.p,phone(o.p),o.c,o.t,o.ad].some(x=>String(x||"").toLowerCase().includes(q))));
   list.sort((a,b)=>b.d.localeCompare(a.d)||b.id.localeCompare(a.id));
@@ -1194,8 +1197,15 @@ function viewOrders(){
     <select class="inp" id="ods" aria-label="التوصيل"><option value="">كل التوصيل</option>${opts(["del","ret","transit","none","stuck"],O.ds,["توصلات","رجعات","فالطريق","ما تصيفطاتش","⏳ ما خرجاتش من COLIX ("+stuckList().length+")"])}</select>
     <select class="inp" id="oa" aria-label="المؤكدة"><option value="">كل المؤكدات</option>${opts(actC(),O.a)}</select>
     <select class="inp" id="opr" aria-label="المنتوج"><option value="">كل المنتوجات</option>${opts(actP(),O.pr)}</select>
+    <input class="inp" type="date" id="oday" value="${esc(day)}" max="${today()}" aria-label="نهار واحد" title="ختار نهار باش تشوف شحال تصيفط وشحال توصل فيه">
+    ${day?'<button class="btn sec" type="button" id="odayX" style="padding:5px 10px">✕ حيد النهار</button>':""}
     ${archChip()}
-  </div></div>
+  </div>
+  ${day?`<div class="bar" style="margin-top:10px;gap:8px"><b class="num">${esc(day.split("-").reverse().join("/"))}</b>
+    <span class="pill p-info">🚚 تصيفطو لـ COLIX: <b class="num">${nf.format(daySent.length)}</b></span>
+    <span class="pill p-good">✅ توصلو: <b class="num">${nf.format(dayLiv.length)}</b> · <span class="num">${dh(dayLiv.reduce((a,o)=>a+(+o.pz||0),0))}</span></span>
+    <small>اللائحة لتحت فيها غير الطلبيات اللي تصيفطو ولا توصلو ف هاد النهار.</small></div>`:""}
+  </div>
   <div class="card" style="padding:8px 12px">
     ${pageRows.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th class="r">الثمن</th><th>المؤكدة</th><th>التأكيد</th><th>التوصيل</th><th>Tracking</th></tr></thead><tbody>
     ${pageRows.map(o=>`<tr class="click ${rowCls(o)}" data-id="${o.id}"><td class="num">${esc(o.d.slice(5))}</td>
@@ -1210,6 +1220,7 @@ function viewOrders(){
   </div>`;
   const re=()=>{O.page=0;viewOrders()};
   $("oq").oninput=e=>{O.q=e.target.value;clearTimeout(viewOrders.t);viewOrders.t=setTimeout(()=>{re();const i=$("oq");i.focus();i.setSelectionRange(i.value.length,i.value.length)},300)};
+  $("oday").onchange=e=>{O.day=e.target.value;re()};if($("odayX"))$("odayX").onclick=()=>{O.day="";re()};
   $("om").onchange=e=>{O.m=e.target.value;re()};$("ocs").onchange=e=>{O.cs=e.target.value;re()};
   $("ods").onchange=e=>{O.ds=e.target.value;re()};$("oa").onchange=e=>{O.a=e.target.value;re()};$("opr").onchange=e=>{O.pr=e.target.value;re()};
   bindArch(()=>{O.page=0;O.m="";viewOrders()});
@@ -1345,6 +1356,8 @@ const STUCK_DAYS=1;
 function sentDay(o){if(o.sd)return o.sd;const h=(o.hist||[]).map(histDate).filter(Boolean).sort()[0];return (h||o.d||"").slice(0,10)}
 function stuckDays(o){if(!o.t||o.imp||dsRank(o.ds)>2||CANCEL.has(o.cs))return -1;const d=sentDay(o);if(!d)return -1;
   const n=Math.floor((new Date(today()+"T00:00:00")-new Date(d+"T00:00:00"))/864e5);return n>=STUCK_DAYS?n:-1}
+/* the day a parcel went to COLIX, as YYYY-MM-DD: saved send day, else its first step in the COLIX history, else the order day */
+function sendDay(o){if(o.sd)return o.sd;const h=(o.hist||[]).map(m=>{const x=histDate(m);let r=x.match(/(\d{4})-(\d{2})-(\d{2})/);if(r)return r[0];r=x.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);return r?r[3]+"-"+pad(+r[2])+"-"+pad(+r[1]):""}).filter(Boolean).sort()[0];return h||(o.d||"").slice(0,10)}
 function stuckList(){return allOrders().filter(o=>stuckDays(o)>=0)}
 function stuckPill(o){const n=stuckDays(o);return n<0?"":` <span class="pill p-bad" title="تصيفطات لـ COLIX ولكن باقي ما خرجاتش (ممكن ما كاينش الستوك عندهم)">⏳ ما خرجاتش · ${n} ${n===1?"نهار":"أيام"}</span>`}
 function dsNewer(oldDs,newDs){return !!newDs&&newDs!==oldDs&&dsRank(newDs)>=dsRank(oldDs)}
