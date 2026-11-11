@@ -1497,36 +1497,57 @@ function viewConf(){
   });
 }
 
-/* ================= stock ================= */
+/* ================= stock =================
+   My own stock is counted per stock item, not per product sold:
+   - rubber strip: one stock in 5 m pieces (a 20 m roll = 4). A 5 m order takes 1, a 10 m order takes 2.
+   - a PACK takes its strip pieces and 1 BAGIT CHROME 15M.
+   The count is kept on the base product's stock0 (strip 5 m, BAGIT 15M). COLIX's stock stays per product. */
+const ROLL=4;
+function stockBases(){const P=ST.products.filter(p=>!p.off);
+  return {ch:(P.find(p=>/شريط|^CHARIT/i.test(p.name)&&!/PACK/i.test(p.name)&&/(^|\D)5\s*(متر|M)/i.test(p.name))||{}).name||"",
+          bg:(P.find(p=>/BAGIT/i.test(p.name)&&!/PACK/i.test(p.name)&&/15/.test(p.name))||{}).name||""}}
+function stockUse(name,B){
+  B=B||stockBases();const n=String(name||""),strip=/شريط|CHARIT/i.test(n),pack=/PACK/i.test(n);
+  if(!strip||!B.ch)return [[n,1]];
+  const m=n.match(/(\d+)\s*(?:متر|M)(?![a-z])/i),pieces=Math.max(1,Math.round((m?+m[1]:5)/5));
+  return pack?[[B.ch,pieces],...(B.bg?[[B.bg,1]]:[])]:[[B.ch,pieces]];
+}
+function stockRows(){
+  const B=stockBases(),ords=allOrders().filter(freshO),P=ST.products.filter(p=>!p.off);
+  const items=P.filter(p=>{const u=stockUse(p.name,B);return u.length===1&&u[0][0]===p.name});
+  return items.map(p=>{
+    const r={p,strip:p.name===B.ch,pack:P.some(x=>x.name!==p.name&&stockUse(x.name,B).some(u=>u[0]===p.name)),inn:0,del:0,tr:0,back:0};
+    P.forEach(x=>stockUse(x.name,B).forEach(([b,n])=>{if(b===p.name)r.inn+=(+x.stock0||0)*n}));
+    ords.forEach(o=>stockUse(o.pr,B).forEach(([b,n])=>{if(b!==p.name)return;const q=(+o.q||1)*n,g=dGroup(o);
+      if(g==="del")r.del+=q;else if(g==="transit")r.tr+=q;else if(g==="ret"&&o.t&&!o.rcv)r.back+=q})); /* back: returned by COLIX but not in hand yet */
+    r.used=r.del+r.tr+r.back;r.actual=r.inn-r.used;r.tracked=r.inn>0;return r});
+}
 function viewStock(){
-  const ords=allOrders().filter(freshO),low=+ST.lowStock||15;
-  const rows=ST.products.filter(p=>!p.off).map(p=>{
-    const os=ords.filter(o=>o.pr===p.name);
-    const del=os.filter(o=>dGroup(o)==="del").reduce((a,o)=>a+(+o.q||1),0);
-    const tr=os.filter(o=>dGroup(o)==="transit").reduce((a,o)=>a+(+o.q||1),0);
-    const back=os.filter(o=>dGroup(o)==="ret"&&o.t&&!o.rcv).reduce((a,o)=>a+(+o.q||1),0); /* returned by COLIX but not in hand yet */
-    return{p,del,tr,back,actual:(+p.stock0||0)-del-tr-back,tracked:(+p.stock0||0)>0};
-  });
+  const low=+ST.lowStock||15,rows=stockRows();
   const value=rows.filter(r=>r.tracked).reduce((a,r)=>a+Math.max(0,r.actual)*(+r.p.cost||0),0);
+  const rolls=n=>n>0?`<br><small class="num" style="opacity:.7">${Math.floor(n/ROLL)} رولو${n%ROLL?" و "+(n%ROLL)+" قطع":""}</small>`:"";
   $("view").innerHTML=`
   <div class="head"><div><h1>الستوك</h1><div class="sub">الستوك الحالي = كل اللي دخل ناقص اللي توصل، واللي فالطريق، واللي راجع وباقي ما وصلكش</div></div></div>
   <div class="kpis"><div class="kpi"><span class="l">قيمة الستوك (بثمن الشرا)</span><span class="v num">${dh(value)}</span></div>
   <div class="kpi"><span class="l">منتوجات قربو يساليو</span><span class="v num">${rows.filter(r=>r.tracked&&r.actual<low).length}</span><span class="s">تحت ${low} حبة</span></div></div>
-  <div class="card"><div class="tw"><table><thead><tr><th>المنتوج</th><th class="r">دخل للستوك</th><th class="r">توصل</th><th class="r">فالطريق</th><th class="r">راجع (ما وصلش)</th><th class="r">الستوك الحالي</th><th></th><th>زيد ستوك</th></tr></thead><tbody>
-  ${rows.map(({p,del,tr,back,actual,tracked},i)=>`<tr><td>${esc(p.name)}</td><td class="r num">${nf.format(p.stock0||0)}</td><td class="r num">${del}</td><td class="r num">${tr}</td><td class="r num">${back?`<a href="#returns" style="color:var(--bad)">${back}</a>`:0}</td><td class="r num"><b>${tracked?nf.format(actual):"—"}</b></td>
+  <div class="card"><div class="tw"><table><thead><tr><th>المنتوج</th><th class="r">دخل للستوك</th><th class="r">توصل</th><th class="r">فالطريق</th><th class="r">راجع (ما وصلش)</th><th class="r">الستوك الحالي</th><th></th><th>زيد ستوك · ولا صحح العدد</th></tr></thead><tbody>
+  ${rows.map(({p,strip,pack,inn,del,tr,back,actual,tracked},i)=>`<tr><td>${strip?`الشريط المطاطي <b>(قطع ديال 5 متر)</b><br><small style="opacity:.7">الرولو = ${ROLL} قطع · طلبية 5 متر = 1 · طلبية 10 متر = 2${pack?" · الباك محسوب":""}</small>`:esc(p.name)+(pack?'<br><small style="opacity:.7">الباك محسوب معاه</small>':"")}</td><td class="r num">${nf.format(inn)}</td><td class="r num">${del}</td><td class="r num">${tr}</td><td class="r num">${back?`<a href="#returns" style="color:var(--bad)">${back}</a>`:0}</td><td class="r num"><b>${tracked?nf.format(actual):"—"}</b>${strip&&tracked?rolls(actual):""}</td>
     <td>${!tracked?'<span class="pill p-none">ما مسجلش</span>':actual<=0?'<span class="pill p-bad">سالا</span>':actual<low?'<span class="pill p-warn">قرب يسالي</span>':'<span class="pill p-good">مزيان</span>'}</td>
-    <td><div class="bar" style="flex-wrap:nowrap"><input class="inp num" style="width:80px" inputmode="numeric" id="rs${i}" placeholder="0" aria-label="الكمية"><button class="btn sec" data-rs="${i}" style="padding:5px 10px">زيد</button></div></td></tr>`).join("")}
+    <td><div class="bar" style="flex-wrap:nowrap;gap:6px"><input class="inp num" style="width:70px" inputmode="numeric" id="rs${i}" placeholder="0" aria-label="الكمية">${strip?`<select class="inp" id="ru${i}" aria-label="الوحدة" style="padding:4px 6px"><option value="${ROLL}">رولو</option><option value="1">قطعة</option></select>`:""}<button class="btn sec" data-rs="${i}" style="padding:5px 10px">زيد</button><button class="btn sec" data-rfix="${i}" style="padding:5px 10px" title="كتب العدد اللي عندك دابا بصح، والستوك كيولي هو">هادا اللي عندي</button></div></td></tr>`).join("")}
   </tbody></table></div>
-  <p class="note">ملي تشري سلعة جديدة، كتب الكمية وكليكي "زيد". ثمن الشرا ديال الطلبيات اللي توصلات كيتحسب بوحدو فالأرباح.</p></div>
-  ${(ST.restocks||[]).length?`<div class="card"><h2>سجل دخول السلعة</h2><div class="list">${ST.restocks.slice().reverse().slice(0,30).map(r=>`<div class="li"><span>${esc(r.p)} <small class="num">${esc(r.date)}</small></span><span class="num">+${nf.format(r.qty)}</span></div>`).join("")}</div></div>`:""}
+  <p class="note">ملي تشري سلعة جديدة، كتب الكمية وكليكي "زيد". الشريط كتزيدو بالرولو ولا بالقطعة. إلا العدد ما مطابقش مع اللي عندك بصح، حسب السلعة، كتب العدد وكليكي "هادا اللي عندي". ثمن الشرا ديال الطلبيات اللي توصلات كيتحسب بوحدو فالأرباح.</p></div>
+  ${(ST.restocks||[]).length?`<div class="card"><h2>سجل دخول السلعة</h2><div class="list">${ST.restocks.slice().reverse().slice(0,30).map(r=>`<div class="li"><span>${esc(r.p)}${r.fix?' <small>(تصحيح)</small>':""} <small class="num">${esc(r.date)}</small></span><span class="num ${r.qty<0?"neg":""}">${r.qty>0?"+":""}${nf.format(r.qty)}</span></div>`).join("")}</div></div>`:""}
   ${cxStockCard(low)}`;
   bindCxStock();
-  document.querySelectorAll("[data-rs]").forEach(b=>b.onclick=async()=>{
-    const i=+b.dataset.rs,q=parseInt($("rs"+i).value);if(!(q>0)){toast("كتب الكمية");return}
-    const p=rows[i].p;if(!p.stock0){const r=rows[i];p.stock0=r.del+r.tr+r.back}
-    p.stock0=(+p.stock0||0)+q;ST.restocks=[...(ST.restocks||[]),{p:p.name,qty:q,date:today()}];
-    viewStock();try{await writeSettings();toast("تزاد الستوك ديال "+p.name)}catch(e){toast(failMsg(e))}
-  });
+  const qty=i=>{const v=parseInt($("rs"+i).value);return isNaN(v)?NaN:v*(rows[i].strip?+$("ru"+i).value:1)};
+  const label=r=>r.strip?"الشريط المطاطي (قطع 5 متر)":r.p.name;
+  /* move the stock by `d` items; the first time, start counting from now (what already went out is not held against it) */
+  const bump=async(r,d,fix)=>{const p=r.p;if(!r.tracked)p.stock0=(+p.stock0||0)+r.used;
+    p.stock0=(+p.stock0||0)+d;ST.restocks=[...(ST.restocks||[]),{p:label(r),qty:d,date:today(),...(fix?{fix:1}:{})}];
+    viewStock();try{await writeSettings();toast((fix?"تصحح":"تزاد")+" الستوك ديال "+label(r))}catch(e){toast(failMsg(e))}};
+  document.querySelectorAll("[data-rs]").forEach(b=>b.onclick=()=>{const i=+b.dataset.rs,q=qty(i);if(!(q>0)){toast("كتب الكمية");return}bump(rows[i],q)});
+  document.querySelectorAll("[data-rfix]").forEach(b=>b.onclick=()=>{const i=+b.dataset.rfix,q=qty(i),r=rows[i];if(!(q>=0)){toast("كتب العدد اللي عندك دابا");return}
+    const d=q-(r.tracked?r.actual:0);if(!d&&r.tracked){toast("العدد هو هو");return}bump(r,d,true)});
 }
 
 /* ================= stock held at COLIX =================
