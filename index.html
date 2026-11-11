@@ -185,6 +185,7 @@ nav a .bd{font-style:normal;background:#E5383B;color:#fff;border-radius:999px;fo
   h1{font-size:1.2rem}
   .kpi .v{font-size:1.15rem}
 }
+@media print{.side,.side-dim,header.top,.noprint{display:none!important}.app{display:block!important}body{background:#fff!important}.card,.kpi{break-inside:avoid}}
 </style>
 </head>
 <body>
@@ -194,6 +195,7 @@ nav a .bd{font-style:normal;background:#E5383B;color:#fff;border-radius:999px;fo
   <div class="side-logo"><img src="logo-dark.png" alt="BIDABELL"><small>Pro</small></div>
   <nav id="nav" hidden>
       <a href="#dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg><span>لوحة القيادة</span><i class="bd" hidden></i></a>
+      <a href="#report"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 17v-3M12 17v-6M15 17v-2"/></svg><span>التقارير</span><i class="bd" hidden></i></a>
       <a href="#youcan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13H7z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg><span>YouCan</span><i class="bd" hidden></i></a>
       <a href="#notes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg><span>ملاحظات</span><i class="bd" hidden></i></a>
       <a href="#orders"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg><span>الطلبيات</span><i class="bd" hidden></i></a>
@@ -259,7 +261,7 @@ let ready={o:false,e:false,s:false},ISOWNER=true;
 const UI={
   dash:{from:monthStart(),to:today(),preset:"month",prod:""},
   ord:{q:"",m:"",cs:"",ds:"",a:"",pr:"",page:0,edit:null,armed:false,paste:false},
-  conf:{from:"",to:""},archive:false,
+  conf:{from:"",to:""},archive:false,rep:{type:"month",ref:""},
   exp:{m:today().slice(0,7),cur:"DH",cat:EXP_CATS[0],prod:"عام",armed:null}
 };
 
@@ -1002,7 +1004,7 @@ async function importOld(file){
 
 
 /* ================= router ================= */
-const VIEWS={cost:viewCost,notes:viewNotes,returns:viewRet,youcan:viewYC,dashboard:viewDash,orders:viewOrders,confirmers:viewConf,stock:viewStock,expenses:viewExp,settings:viewSettings};
+const VIEWS={report:viewReport,cost:viewCost,notes:viewNotes,returns:viewRet,youcan:viewYC,dashboard:viewDash,orders:viewOrders,confirmers:viewConf,stock:viewStock,expenses:viewExp,settings:viewSettings};
 function route(){
   if(!SB||!PROFILE)return;if(!ISOWNER){if(CV.doc)viewConfirmer();return}
   const k=(location.hash||"#dashboard").slice(1);const v=VIEWS[k]?k:"dashboard";
@@ -1015,6 +1017,56 @@ addEventListener("hashchange",()=>{window.scrollTo(0,0);document.querySelector("
 $("menuBtn").onclick=()=>document.querySelector(".app").classList.toggle("menu-open");
 $("sideDim").onclick=()=>document.querySelector(".app").classList.remove("menu-open");
 
+/* ================= reports: one week (Monday → Sunday) or one month, with the period before next to it ================= */
+function repRange(type,ref){
+  if(type==="week"){const x=new Date(ref+"T12:00:00"),from=shiftDays(ref,-((x.getDay()+6)%7));return {from,to:shiftDays(from,6)}}
+  const m=ref.slice(0,7);return {from:monthStart(m),to:monthEnd(m)}
+}
+function repStats(R){
+  const inR=d=>d>=R.from&&d<=R.to;
+  const ords=curOrders().filter(o=>inR(o.d)||(dGroup(o)==="del"&&inR(delDay(o))));
+  return {inR,ords,of:curOrders().filter(o=>inR(o.d)),s:stats(ords,curExp().filter(e=>inR(e.date)),inR)};
+}
+function viewReport(){
+  const P=UI.rep,t=today();
+  /* opens on the last finished period */
+  if(!P.ref)P.ref=P.type==="week"?shiftDays(t,-7):monthStart(prevMonth(t.slice(0,7)));
+  const R=repRange(P.type,P.ref),prevRef=P.type==="week"?shiftDays(R.from,-7):monthStart(prevMonth(R.from.slice(0,7))),nextRef=P.type==="week"?shiftDays(R.from,7):shiftDays(R.to,1);
+  const A=repStats(R),B=repStats(repRange(P.type,prevRef)),s=A.s,b=B.s;
+  const fd=d=>d.split("-").reverse().join("/");
+  const title=P.type==="week"?`تقرير الأسبوع: ${fd(R.from)} ← ${fd(R.to)}`:`تقرير الشهر: ${mLabel(R.from.slice(0,7))}`;
+  const open=R.to>=t,livN=A.ords.filter(o=>dGroup(o)==="del"&&A.inR(delDay(o))).length;
+  const kp=(l,v,sub,cls)=>`<div class="kpi ${cls||""}"><span class="l">${l}</span><span class="v num">${v}</span>${sub?`<span class="s">${sub}</span>`:""}</div>`;
+  const diff=(x,y)=>{const d=x-y;return !y&&!x?"":`<small class="num ${d>=0?"pos":"neg"}">${d>=0?"+":"−"}${nf.format(Math.abs(Math.round(d)))}</small>`};
+  const mrow=(l,k,bold)=>`<tr${bold?' style="font-weight:700"':""}><td>${l}</td><td class="r num">${dh(s[k])}</td><td class="r num">${dh(b[k])}</td><td class="r">${k==="profit"||k==="rev"?diff(s[k],b[k]):""}</td></tr>`;
+  const grp=f=>{const g={};A.of.forEach(o=>{const k=f(o)||"—",x=g[k]=g[k]||{n:0,conf:0,del:0,ret:0,tr:0,rev:0};x.n++;if(o.cs==="Confirmé")x.conf++;const d=dGroup(o);if(d==="del"){x.del++;x.rev+=+o.pz||0}if(d==="ret")x.ret++;if(d==="transit")x.tr++});
+    return Object.entries(g).sort((a,c)=>c[1].n-a[1].n)};
+  const gtab=(h,rows)=>rows.length?`<div class="tw"><table><thead><tr><th>${h}</th><th class="r">الطلبيات</th><th class="r">مأكدة</th><th class="r">توصلات</th><th class="r">رجعات</th><th class="r">فالطريق</th><th class="r">نسبة التوصيل</th><th class="r">المداخيل</th></tr></thead><tbody>${rows.map(([k,x])=>`<tr><td>${esc(k)}</td><td class="r num">${nf.format(x.n)}</td><td class="r num">${nf.format(x.conf)}</td><td class="r num">${nf.format(x.del)}</td><td class="r num">${nf.format(x.ret)}</td><td class="r num">${nf.format(x.tr)}</td><td class="r num">${pct(x.del,x.del+x.ret)}</td><td class="r num">${dh(x.rev)}</td></tr>`).join("")}</tbody></table></div>`:'<p class="empty">ما كاين حتى طلبية ف هاد الفترة</p>';
+  $("view").innerHTML=`
+  <div class="card"><div class="head"><div><h2 style="margin:0">${title}</h2><div class="sub">${open?"⏳ هاد الفترة باقي ما سالات، الأرقام غادي يتبدلو. ":""}المداخيل ديال الكولي كتتحسب ف النهار اللي توصل فيه.</div></div>
+    <div class="bar noprint" style="gap:6px">
+      <button class="chip" type="button" data-rt="week" aria-pressed="${P.type==="week"}">أسبوعي</button><button class="chip" type="button" data-rt="month" aria-pressed="${P.type==="month"}">شهري</button>
+      <button class="btn sec" type="button" id="repPrev" style="padding:5px 12px">→ اللي قبل</button><button class="btn sec" type="button" id="repNext" style="padding:5px 12px" ${nextRef>t?"disabled":""}>اللي بعد ←</button>
+      <button class="btn" type="button" id="repPrint" style="padding:5px 12px">🖨 طبع / PDF</button>${archChip()}</div></div></div>
+  <div class="kpis">
+    ${kp("الربح الصافي",dh(s.profit),"الفترة اللي قبل: "+dh(b.profit),"hero")}
+    ${kp("المداخيل",dh(s.rev),nf.format(livN)+" كولي توصل ف هاد الفترة")}
+    ${kp("التكاليف",dh(s.costs),"منها الإشهار: "+dh(s.ads))}
+    ${kp("الطلبيات",nf.format(s.n),"الفترة اللي قبل: "+nf.format(b.n))}
+    ${kp("التأكيد",pct(s.conf,s.n),nf.format(s.conf)+" مأكدة")}
+    ${kp("التوصيل",pct(s.del,s.del+s.ret),nf.format(s.del)+" توصلات · "+nf.format(s.ret)+" رجعات"+(s.transit?" · "+nf.format(s.transit)+" فالطريق":""))}
+  </div>
+  <div class="card"><h2>الفلوس</h2><div class="tw"><table><thead><tr><th></th><th class="r">هاد الفترة</th><th class="r">اللي قبل</th><th class="r">الفرق</th></tr></thead><tbody>
+    ${mrow("المداخيل","rev",true)}${mrow("ثمن السلعة","prod")}${mrow("التوصيل (COLIX)","deliv")}${mrow("الإشهار","ads")}${mrow("المؤكدات","cf")}${mrow("التغليف","pack")}${s.retc||b.retc?mrow("الرجوع","retc"):""}${mrow("مصاريف أخرى","other")}${mrow("مجموع التكاليف","costs",true)}${mrow("الربح الصافي","profit",true)}
+  </tbody></table></div><p class="note">الإشهار والمصاريف هوما اللي مسجلين ف صفحة "الإشهار والمصاريف" بتاريخ داخل هاد الفترة.</p></div>
+  <div class="card"><h2>المنتوجات</h2>${gtab("المنتوج",grp(o=>o.pr))}</div>
+  <div class="card"><h2>المؤكدات</h2>${gtab("المؤكدة",grp(o=>o.a))}</div>
+  <div class="card"><h2>المدن الأولى</h2>${gtab("المدينة",grp(o=>(CITY[cnorm(o.c)]||{}).n||o.c).slice(0,10))}</div>`;
+  document.querySelectorAll("[data-rt]").forEach(x=>x.onclick=()=>{P.type=x.dataset.rt;P.ref="";viewReport()});
+  $("repPrev").onclick=()=>{P.ref=prevRef;viewReport()};$("repNext").onclick=()=>{P.ref=nextRef;viewReport()};
+  $("repPrint").onclick=()=>window.print();
+  bindArch(viewReport);
+}
 /* ================= dashboard ================= */
 function setPreset(p){
   const t=today(),D=UI.dash;D.preset=p;
