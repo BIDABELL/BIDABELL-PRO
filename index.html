@@ -531,6 +531,15 @@ async function trackNow(manual){
 }
 let PUSHING=false;
 function outboxCandidates(){return allOrders().filter(o=>o.cs==="Confirmé"&&!o.t&&!o.sent&&!o.cxErr&&!o.imp&&fresh(o.d))}
+/* send again a parcel that never left COLIX. The database keeps a tracking once it is set (orders_before_write),
+   so only the server function cx_resend can clear it; it refuses parcels already picked up. -> orders really reset */
+async function cxResend(ids){
+  const done=[];
+  for(const o of allOrders().filter(o=>ids.includes(o.id))){
+    const {data,error}=await SB.rpc("cx_resend",{p_id:o.id});if(error)throw error;if(!data)continue;
+    if(o.t)o.oldT=[...(o.oldT||[]),o.t].slice(-5);["t","ds","hist","cx","cxAt","sent","cxErr","cxAgent","ld"].forEach(k=>delete o[k]);done.push(o)}
+  return done;
+}
 async function pushOutbox(manual){
   if(!ISOWNER||PUSHING)return;
   const list=outboxCandidates();if(!list.length){if(manual)toast("ما كاين حتى طلبية مأكدة باقي ما تصيفطاتش");return}
@@ -1212,8 +1221,8 @@ function viewOrders(){
   if($("sentX"))$("sentX").onclick=()=>{O.sentRes=null;viewOrders()};
   /* stuck at COLIX (no stock): forget the old parcel and send the order again as a new one */
   const resendStuck=async ids=>{const L=allOrders().filter(o=>ids.includes(o.id));if(!L.length)return;
-    L.forEach(o=>{o.oldT=[...(o.oldT||[]),o.t].slice(-5);["t","ds","hist","cx","cxAt","sent","cxErr","cxAgent","ld"].forEach(k=>delete o[k])});
-    try{await Promise.all([...new Set(L.map(o=>o.d.slice(0,7)))].map(m=>writeOrders(m)))}catch(e){toast(failMsg(e));viewOrders();return}
+    let done;try{done=await cxResend(ids)}catch(e){toast("ما تعاودش الإرسال: "+(e.message||e));viewOrders();return}
+    if(!done.length){toast("ما تعاودش الإرسال: الكولي خرج من COLIX ولا تبدلات الحالة ديالو");viewOrders();return}
     await pushOutbox(true);viewOrders()};
   document.querySelectorAll("[data-stre]").forEach(x=>x.onclick=()=>{x.disabled=true;x.textContent="كيتصيفط…";resendStuck([x.dataset.stre])});
   if($("stuckAll"))$("stuckAll").onclick=()=>{$("stuckAll").disabled=true;resendStuck(stuckList().map(o=>o.id))};
@@ -1288,9 +1297,9 @@ function bindOrderForm(){
       rb.onclick=async()=>{
         if(!O.reArm){O.reArm=true;rb.textContent="متأكد؟ كليكي مرة أخرى";return}
         O.reArm=false;const o=allOrders().find(x=>x.id===O.edit.id);if(!o)return;rb.disabled=true;rb.textContent="كيتصيفط…";
-        if(o.t)o.oldT=[...(o.oldT||[]),o.t].slice(-5);["t","ds","hist","cx","cxAt","sent","cxErr","cxAgent","ld"].forEach(k=>delete o[k]);
-        try{await writeOrders(o.d.slice(0,7))}catch(e){toast(failMsg(e));O.edit=null;viewOrders();return}
-        O.edit=null;await pushOutbox(true);viewOrders()};
+        let done;try{done=await cxResend([o.id])}catch(e){toast("ما تعاودش الإرسال: "+(e.message||e));O.edit=null;viewOrders();return}
+        O.edit=null;if(!done.length){toast("ما تعاودش الإرسال: الكولي خرج من COLIX ولا تبدلات الحالة ديالو");viewOrders();return}
+        await pushOutbox(true);viewOrders()};
     }
   }
   $("f_pr").onchange=e=>{const p=prodOf(e.target.value);if(p.price)$("f_pz").value=p.price*(+$("f_q").value||1)};
