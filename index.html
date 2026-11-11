@@ -1162,10 +1162,10 @@ function viewOrders(){
   const O=UI.ord,q=O.q.trim().toLowerCase();
   let list=curOrders();
   const months=[...new Set(list.map(o=>o.d.slice(0,7)))].sort().reverse();
-  /* one day: what went to COLIX that day and what was delivered that day (whatever the order day or month) */
-  const day=O.day||"",base=list,sentOn=o=>!!(o.t||o.sent)&&sendDay(o)===day,livOn=o=>o.ds==="Livré"&&delDay(o)===day;
-  const daySent=day?base.filter(sentOn):[],dayLiv=day?base.filter(livOn):[];
-  list=list.filter(o=>(day?(sentOn(o)||livOn(o)):(!O.m||o.d.startsWith(O.m)))&&(!O.cs||o.cs===O.cs)&&(!O.a||o.a===O.a)&&(!O.pr||o.pr===O.pr)
+  /* one day: only the parcels that went to COLIX that day (whatever the order day or month), and how many of them are delivered */
+  const day=O.day||"",sentOn=o=>!!(o.t||o.sent)&&sendDay(o)===day;
+  const daySent=day?list.filter(sentOn):[],dayLiv=daySent.filter(o=>o.ds==="Livré");
+  list=list.filter(o=>(day?sentOn(o):(!O.m||o.d.startsWith(O.m)))&&(!O.cs||o.cs===O.cs)&&(!O.a||o.a===O.a)&&(!O.pr||o.pr===O.pr)
     &&(!O.ds||(O.ds==="stuck"?stuckDays(o)>=0:dGroup(o)===O.ds))
     &&(!q||[o.n,o.p,phone(o.p),o.c,o.t,o.ad].some(x=>String(x||"").toLowerCase().includes(q))));
   list.sort((a,b)=>b.d.localeCompare(a.d)||b.id.localeCompare(a.id));
@@ -1197,14 +1197,14 @@ function viewOrders(){
     <select class="inp" id="ods" aria-label="التوصيل"><option value="">كل التوصيل</option>${opts(["del","ret","transit","none","stuck"],O.ds,["توصلات","رجعات","فالطريق","ما تصيفطاتش","⏳ ما خرجاتش من COLIX ("+stuckList().length+")"])}</select>
     <select class="inp" id="oa" aria-label="المؤكدة"><option value="">كل المؤكدات</option>${opts(actC(),O.a)}</select>
     <select class="inp" id="opr" aria-label="المنتوج"><option value="">كل المنتوجات</option>${opts(actP(),O.pr)}</select>
-    <input class="inp" type="date" id="oday" value="${esc(day)}" max="${today()}" aria-label="نهار واحد" title="ختار نهار باش تشوف شحال تصيفط وشحال توصل فيه">
+    <input class="inp" type="date" id="oday" value="${esc(day)}" max="${today()}" aria-label="نهار واحد" title="ختار نهار باش تشوف غير الطلبيات اللي تصيفطو فيه">
     ${day?'<button class="btn sec" type="button" id="odayX" style="padding:5px 10px">✕ حيد النهار</button>':""}
     ${archChip()}
   </div>
   ${day?`<div class="bar" style="margin-top:10px;gap:8px"><b class="num">${esc(day.split("-").reverse().join("/"))}</b>
     <span class="pill p-info">🚚 تصيفطو لـ COLIX: <b class="num">${nf.format(daySent.length)}</b></span>
-    <span class="pill p-good">✅ توصلو: <b class="num">${nf.format(dayLiv.length)}</b> · <span class="num">${dh(dayLiv.reduce((a,o)=>a+(+o.pz||0),0))}</span></span>
-    <small>اللائحة لتحت فيها غير الطلبيات اللي تصيفطو ولا توصلو ف هاد النهار.</small></div>`:""}
+    <span class="pill p-good">✅ توصلو منهم: <b class="num">${nf.format(dayLiv.length)}</b> · <span class="num">${dh(dayLiv.reduce((a,o)=>a+(+o.pz||0),0))}</span></span>
+    <small>اللائحة لتحت فيها غير الطلبيات اللي تصيفطو ف هاد النهار.</small></div>`:""}
   </div>
   <div class="card" style="padding:8px 12px">
     ${pageRows.length?`<div class="tw"><table><thead><tr><th>التاريخ</th><th>الكليان</th><th>المدينة</th><th>المنتوج</th><th class="r">الثمن</th><th>المؤكدة</th><th>التأكيد</th><th>التوصيل</th><th>Tracking</th></tr></thead><tbody>
